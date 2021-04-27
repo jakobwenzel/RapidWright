@@ -2279,4 +2279,9 @@ public class DesignTools {
 		FileTools.deleteFolder(job.getRunDir());
 		return edfFileName;
 	}
+	public static ModuleImplsInstance createModuleImplsInstance(Design design, String name, ModuleImpls module) {
+		EDIFCellInst cell = design.createOrFindEDIFCellInst(name, module.getNetlist().getTopCell());
+		return new ModuleImplsInstance(name, cell, module);
+	}
+
 }
