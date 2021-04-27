@@ -34,6 +34,12 @@ import java.util.Map;
 import com.xilinx.rapidwright.design.blocks.ImplGuide;
 import com.xilinx.rapidwright.device.Device;
 import com.xilinx.rapidwright.edif.EDIFNetlist;
+import com.xilinx.rapidwright.edif.EDIFPortInst;
+import com.xilinx.rapidwright.edif.EDIFTools;
+import com.xilinx.rapidwright.placer.blockplacer.BlockPlacer2Module;
+import com.xilinx.rapidwright.placer.handplacer.HandPlacer;
+import com.xilinx.rapidwright.router.Router;
+import com.xilinx.rapidwright.tests.CodePerfTracker;
 import com.xilinx.rapidwright.util.FileTools;
 
 /**

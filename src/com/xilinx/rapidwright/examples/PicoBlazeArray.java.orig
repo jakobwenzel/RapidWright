@@ -245,8 +245,14 @@ public class PicoBlazeArray {
 
 		String srcDirName = options.valueOf(dirOption);
 		File srcDir = new File(srcDirName);
+<<<<<<< Updated upstream
+		if(!srcDir.isDirectory()){
+			throw new RuntimeException("ERROR: Couldn't read directory: " + srcDir);
+=======
 		if (!srcDir.isDirectory()) {
-						throw new RuntimeException("ERROR: Couldn't read directory: " + srcDir);
+			System.err.println("ERROR: Couldn't read directory: " + srcDir);
+			System.exit(-1);
+>>>>>>> Stashed changes
 		}
 		String part = options.valueOf(partOption);
 		String outName = options.valueOf(outOption);

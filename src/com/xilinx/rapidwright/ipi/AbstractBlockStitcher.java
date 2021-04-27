@@ -50,7 +50,7 @@ import com.xilinx.rapidwright.edif.EDIFPortInst;
 import com.xilinx.rapidwright.edif.EDIFTools;
 import com.xilinx.rapidwright.gui.ModuleInstanceScene;
 import com.xilinx.rapidwright.gui.UiTools;
-import com.xilinx.rapidwright.placer.blockplacer.BlockPlacer2;
+import com.xilinx.rapidwright.placer.blockplacer.BlockPlacer2Module;
 import com.xilinx.rapidwright.placer.handplacer.FloorPlanScene;
 import com.xilinx.rapidwright.placer.handplacer.HandPlacer;
 import com.xilinx.rapidwright.router.Router;
@@ -725,8 +725,8 @@ public abstract class AbstractBlockStitcher {
             if(OPEN_HAND_PLACER) HandPlacer.openDesign(stitched);
             return;
         }else{
-            BlockPlacer2 placer = new BlockPlacer2();
-            placer.placeDesign(stitched, false);
+            BlockPlacer2Module placer = new BlockPlacer2Module(stitched);
+            placer.placeDesign(false);
         }
 
         // Create an example impl guide file
