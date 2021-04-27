@@ -106,11 +106,11 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
                 List<String> siteWires = new ArrayList<>();
                 SitePinInst spi = cell.getSitePinFromPortInst(portInst, siteWires);
                 if (spi == null) {
-                    /*System.out.println(siteWires);
+                    System.out.println(siteWires);
                     System.out.println(cell.getAllSitePinsFromPortInst(portInst, siteWires));
                     System.out.println(siteWires);
                     System.out.println(cell.getSitePinFromPortInst(portInst, siteWires));
-                    System.out.println(siteWires);*/
+                    System.out.println(siteWires);
                     //TODO is this allowed to happen?
                     System.err.println("while creating an ImplsInstancePort for "+portInst+", could not find the port in cell "+cell);
                     return null;
@@ -252,4 +252,5 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
         super.initialPlacement();
         //dumpDot(Paths.get("/tmp/initial.dot"));
     }
+
 }

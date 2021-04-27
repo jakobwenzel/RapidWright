@@ -17,6 +17,7 @@ import com.xilinx.rapidwright.design.Module;
 import com.xilinx.rapidwright.design.ModuleImpls;
 import com.xilinx.rapidwright.design.ModuleImplsInstance;
 import com.xilinx.rapidwright.design.ModuleInst;
+import com.xilinx.rapidwright.design.ModulePlacement;
 import com.xilinx.rapidwright.design.SiteInst;
 import com.xilinx.rapidwright.device.Device;
 import com.xilinx.rapidwright.device.Site;
@@ -165,7 +166,7 @@ public class PicoBlazeArray {
 					}
 					mi.getCellInst().setCellType(impl.getNetlist().getTopCell()); //TODO needed????
 
-					placeInArray(mi, bram);
+					placeInArray(mi, bram, impl);
 					//mi.place(impl.getAnchor().getSite());
 
 					this.instances.add(mi);
@@ -214,8 +215,10 @@ public class PicoBlazeArray {
 			return design;
 		}
 
-		protected abstract void placeInArray(T mi, Site bram);
+		protected abstract void placeInArray(T mi, Site bram, Module impl);
 		protected abstract BlockPlacer2<?, ?, ?> createPlacer(Design design);
+
+		public abstract void lowerToModules(Design design);
 	}
 
 	/**
@@ -258,18 +261,28 @@ public class PicoBlazeArray {
 		PicoBlazeArrayCreator<?> creator;
 		if (useImpls) {
 			creator = new PicoBlazeArrayCreator<ModuleImplsInstance>() {
+
+				private BlockPlacer2ImplsDebug placer;
+
 				@Override
 				protected ModuleImplsInstance createInstance(Design design, String name, Module impl, ModuleImpls impls) {
 					return DesignTools.createModuleImplsInstance(design, name, impls);
 				}
 
 				@Override
-				protected void placeInArray(ModuleImplsInstance mi, Site bram) {
+				protected void placeInArray(ModuleImplsInstance mi, Site bram, Module impl) {
+					mi.place(new ModulePlacement(impl.getImplementationIndex(), bram));
 				}
 
 				@Override
 				protected BlockPlacer2<ModuleImplsInstance, ?, ?> createPlacer(Design design) {
-					return new BlockPlacer2ImplsDebug(design, getInstances(), getMaxTileColumn());
+					placer = new BlockPlacer2ImplsDebug(design, getInstances(), getMaxTileColumn());
+					return placer;
+				}
+
+				@Override
+				public void lowerToModules(Design design) {
+					DesignTools.createModuleInstsFromModuleImplsInsts(design, getInstances(), placer.getPaths());
 				}
 			};
 		} else {
@@ -281,13 +294,18 @@ public class PicoBlazeArray {
 				}
 
 				@Override
-				protected void placeInArray(ModuleInst mi, Site bram) {
+				protected void placeInArray(ModuleInst mi, Site bram, Module impl) {
 					mi.place(bram);
 				}
 
 				@Override
 				protected BlockPlacer2<?, ?, ?> createPlacer(Design design) {
 					return new BlockPlacer2ModuleDebug(design, getMaxTileColumn());
+				}
+
+				@Override
+				public void lowerToModules(Design design) {
+					//Nothing to do
 				}
 			};
 		}
@@ -305,6 +323,7 @@ public class PicoBlazeArray {
 		t.stop().start("BlockPlacer");
 		creator.createPlacer(design).placeDesign(true);
 
+		creator.lowerToModules(design);
 
 		if (!noHandPlacer) {
 			t.stop().start("Hand Placer");
