@@ -67,6 +67,8 @@ import com.xilinx.rapidwright.edif.EDIFNetlist;
 import com.xilinx.rapidwright.edif.EDIFPort;
 import com.xilinx.rapidwright.edif.EDIFPortInst;
 import com.xilinx.rapidwright.edif.EDIFTools;
+import com.xilinx.rapidwright.placer.blockplacer.ImplsInstancePort;
+import com.xilinx.rapidwright.placer.blockplacer.ImplsPath;
 import com.xilinx.rapidwright.router.RouteNode;
 import com.xilinx.rapidwright.tests.CodePerfTracker;
 import com.xilinx.rapidwright.util.MessageGenerator;
@@ -2158,6 +2160,102 @@ public class DesignTools {
 	public static ModuleImplsInstance createModuleImplsInstance(Design design, String name, ModuleImpls module) {
 		EDIFCellInst cell = design.createOrFindEDIFCellInst(name, module.getNetlist().getTopCell());
 		return new ModuleImplsInstance(name, cell, module);
+	}
+
+	private static Net findPortSourceNet(ImplsPath path, Map<ModuleImplsInstance, ModuleInst> instanceMap) {
+		for (ImplsInstancePort port : path) {
+			if (port.isOutputPort()) {
+				if (port instanceof ImplsInstancePort.InstPort) {
+					ImplsInstancePort.InstPort instPort = (ImplsInstancePort.InstPort) port;
+					Port modPort = instPort.getInstance().getCurrentModuleImplementation().getPort(instPort.getPort());
+					if (!modPort.getPassThruPortNames().isEmpty()) {
+						throw new RuntimeException("Passthrough not yet supported");
+					}
+					ModuleInst moduleInst = instanceMap.get(instPort.getInstance());
+					Net net = moduleInst.getCorrespondingNet(modPort);
+					if (net == null) {
+						throw new IllegalStateException("No net on module port "+moduleInst+"."+modPort.getName());
+					}
+					return net;
+				} else if (port instanceof ImplsInstancePort.SPI) {
+					SitePinInst spi = ((ImplsInstancePort.SPI) port).getSitePinInst();
+					Net net = spi.getNet();
+					if (net == null) {
+						throw new IllegalStateException("No net on SPI "+spi);
+					}
+					return net;
+				} else {
+					throw new IllegalStateException("unknown subtype!");
+				}
+			}
+		}
+		throw new RuntimeException("no source port in "+path.getName());
+	}
+	private static Net findPortNet(ImplsInstancePort port, Map<ModuleImplsInstance, ModuleInst> instanceMap) {
+		if (port instanceof ImplsInstancePort.SPI) {
+			SitePinInst spi = ((ImplsInstancePort.SPI) port).getSitePinInst();
+			Net net = spi.getNet();
+			if (net == null) {
+				throw new IllegalStateException("No net on SPI "+spi);
+			}
+			return net;
+		} else if (port instanceof ImplsInstancePort.InstPort) {
+			ImplsInstancePort.InstPort instPort = (ImplsInstancePort.InstPort) port;
+			Port modPort = instPort.getInstance().getCurrentModuleImplementation().getPort(instPort.getPort());
+			if (!modPort.getPassThruPortNames().isEmpty()) {
+				throw new RuntimeException("Passthrough not yet supported");
+			}
+			ModuleInst moduleInst = instanceMap.get(instPort.getInstance());
+			Net net = moduleInst.getCorrespondingNet(modPort);
+			if (net == null) {
+				throw new IllegalStateException("No net on module port "+moduleInst+"."+modPort.getName());
+			}
+			return net;
+		} else {
+			throw new IllegalStateException("unknown subtype!");
+		}
+	}
+	public static void createModuleInstsFromModuleImplsInsts(Design design, List<ModuleImplsInstance> instances, Collection<ImplsPath> paths) {
+		Map<ModuleImplsInstance, ModuleInst> instanceMap = new HashMap<>();
+		for (ModuleImplsInstance implsInst : instances) {
+			ModuleInst modInst = design.createModuleInst(implsInst.getName(), implsInst.getCurrentModuleImplementation());
+			boolean success = modInst.place(implsInst.getPlacement().placement);
+			if (!success) {
+				throw new IllegalStateException("could not place module "+modInst.getName()+" at "+implsInst.getPlacement().placement);
+			}
+			instanceMap.put(implsInst, modInst);
+		}
+		for (ImplsPath path : paths) {
+			Net net = null;
+			for (ImplsInstancePort port : path) {
+				Net portNet = findPortNet(port, instanceMap);
+				if (net == null) {
+					net = portNet;
+				} else if (port.isOutputPort()) {
+					design.movePinsToNewNetDeleteOldNet(net, portNet, false);
+					net = portNet;
+				} else {
+					design.movePinsToNewNetDeleteOldNet(portNet, net, false);
+				}
+				/*if (port.isOutputPort()) {
+					continue;
+				}
+				if (port instanceof ImplsInstancePort.SPI) {
+					net.addPin(((ImplsInstancePort.SPI) port).getSitePinInst());
+				} else if (port instanceof ImplsInstancePort.InstPort) {
+					ImplsInstancePort.InstPort instPort = (ImplsInstancePort.InstPort) port;
+					Port modPort = instPort.getInstance().getCurrentModuleImplementation().getPort(instPort.getPort());
+					ModuleInst moduleInst = instanceMap.get(instPort.getInstance());
+					Net oldNet = moduleInst.getCorrespondingNet(modPort);
+					if (oldNet == null) {
+						throw new IllegalStateException("No net on module port "+moduleInst+"."+modPort.getName());
+					}
+					design.movePinsToNewNetDeleteOldNet(oldNet, net, false);
+				} else {
+					throw new IllegalStateException("unknown subtype!");
+				}*/
+			}
+		}
 	}
 
 }

@@ -605,6 +605,10 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 
 	protected abstract int getTileSize(ModuleInstT hm);
 
+	public Collection<PathT> getPaths() {
+		return allPaths;
+	}
+
 	enum Direction{UP, DOWN, LEFT, RIGHT};
 
 
