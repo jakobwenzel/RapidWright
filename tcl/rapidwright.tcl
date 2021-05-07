@@ -70,8 +70,8 @@ proc compile_openened_block_dcp { dcpFile ip_nr_instances} {
         set global_pblock_file ""
     }
     puts "args $urptName $shapesFileName $ip_nr_instances $global_pblock_file"
-	if { [catch {set pBlockVal [exec java --illegal-access=deny -Xmx2G com.xilinx.rapidwright.design.blocks.PBlockGenerator -u $urptName -s $shapesFileName -c 1 -i $ip_nr_instances $global_pblock_command]}] } {
-	    set pBlockVal "PBlockGenerator Failed!"
+	if { [catch {set pBlockVal [exec $::env(RAPIDWRIGHT_PATH)/build/install/rapidwright/bin/rapidwright PBlockGenerator -u $urptName -s $shapesFileName -c 1 -i $ip_nr_instances $global_pblock_command]} pblockerr] } {
+	    set pBlockVal "PBlockGenerator Failed!: $pBlockVal $pblockerr"
 	}
         puts "pBlock = $pBlockVal, from: $urptName $shapesFileName"
         set fp [open [string map {".dcp" "_pblock.txt"} $dcpFile] "w"]
@@ -87,7 +87,7 @@ proc compile_openened_block_dcp { dcpFile ip_nr_instances} {
 
 proc compile_block_dcp  { dcpFile  ip_nr_instances} {
     set rootDcpFileName [string map {".dcp" ""} $dcpFile]
-    
+
     puts "Loading $dcpFile";
 
     open_checkpoint $dcpFile
@@ -100,7 +100,7 @@ proc compile_block_dcp  { dcpFile  ip_nr_instances} {
     set cpath ${::env(CLASSPATH)}
     puts "RAPIDWRIGHT_PATH=$rwpath"
     puts "CLASSPATH=$cpath"
-    exec java com.xilinx.rapidwright.util.Unzip ${dcpFile} ${unzipDir}
+    exec $::env(RAPIDWRIGHT_PATH)/build/install/rapidwright/bin/rapidwright Unzip ${dcpFile} ${unzipDir}
     # Avoid naming problems caused by the fact that the files copied into IP_CACHE have different names as the ones expected by RW. Error appears only in designs with multiple IPs with the same ID
 	set file_name_xdc [glob -directory ${unzipDir} *_in_context.xdc]
     read_xdc $file_name_xdc
@@ -350,11 +350,11 @@ proc run_block_stitcher { } {
     set cachePath [get_property IP_OUTPUT_REPO [current_project]]
     
     puts "java -Xss16M com.xilinx.rapidwright.ipi.BlockStitcher ${cachePath}[cache_version_dir] $topLevelEdifFileName $ipsFileName"
-    puts [exec java -Xss16M com.xilinx.rapidwright.ipi.BlockStitcher "${cachePath}[cache_version_dir]" $topLevelEdifFileName $ipsFileName]    
+    puts [exec $::env(RAPIDWRIGHT_PATH)/build/install/rapidwright/bin/rapidwright BlockStitcher "${cachePath}[cache_version_dir]" $topLevelEdifFileName $ipsFileName]
 }
 
 proc check_if_lsf_available {} {
-    return [string equal [exec java com.xilinx.rapidwright.util.JobQueue -lsf_available] "true"]
+    return [string equal [exec $::env(RAPIDWRIGHT_PATH)/build/install/rapidwright/bin/rapidwright JobQueue -lsf_available] "true"]
 }
 
 proc prep_for_block_stitcher {} {
@@ -428,8 +428,8 @@ proc prep_for_block_stitcher {} {
             reset_run $synthRun
         }
         if {[check_if_lsf_available]} {
-            set resource [exec java com.xilinx.rapidwright.util.JobQueue -lsf_resource]
-            set queue [exec java com.xilinx.rapidwright.util.JobQueue -lsf_queue]
+            set resource [exec $::env(RAPIDWRIGHT_PATH)/build/install/rapidwright/bin/rapidwright JobQueue -lsf_resource]
+            set queue [exec $::env(RAPIDWRIGHT_PATH)/build/install/rapidwright/bin/rapidwright JobQueue -lsf_queue]
             launch_runs -lsf "bsub -R $resource -N -q $queue" $runs_needed
         } else {
             launch_runs $runs_needed
@@ -474,13 +474,12 @@ proc prep_for_block_stitcher {} {
             set id [config_ip_cache -get_id $ip]
             puts $fp "compileBlock \$dcpName $nr_instances($id)"
             close $fp
-            set vivado_path [exec java com.xilinx.rapidwright.util.FileTools --get_vivado_path]
+            set vivado_path [exec $::env(RAPIDWRIGHT_PATH)/build/install/rapidwright/bin/rapidwright FileTools --get_vivado_path]
             puts $fp_jobs "$vivado_path -mode batch -source $post_tcl_name # $dir"
         }
         close $fp_jobs
         puts "Running opt_design jobs..."
-	puts "java com.xilinx.rapidwright.util.JobQueue $jobs_file_name"
-        puts [exec java com.xilinx.rapidwright.util.JobQueue $jobs_file_name]
+	puts "java com.xilinx.rapidwright.util.JobQueue $::env(RAPIDWRIGHT_PATH)/build/install/rapidwright/bin/rapidwright java com.xilinx.rapidwright.util.JobQueue $jobs_file_name]
     }    
 }
 
