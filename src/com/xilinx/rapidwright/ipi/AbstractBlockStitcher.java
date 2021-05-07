@@ -670,6 +670,7 @@ public abstract class AbstractBlockStitcher {
         for(String lib : libsToRemove){
             stitched.getNetlist().removeLibrary(lib);
         }
+        PlacementLegalizer.legalizeNonModuleSitePlacements(stitched, nonModuleSiteInsts);
 
         t.stop();
         if(DUMP_SYNTH_DCP_ONLY){
