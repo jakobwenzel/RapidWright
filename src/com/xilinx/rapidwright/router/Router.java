@@ -41,13 +41,13 @@ import com.xilinx.rapidwright.design.Design;
 import com.xilinx.rapidwright.design.DesignTools;
 import com.xilinx.rapidwright.design.Net;
 import com.xilinx.rapidwright.design.NetType;
-import com.xilinx.rapidwright.design.SitePinInst;
 import com.xilinx.rapidwright.design.SiteInst;
+import com.xilinx.rapidwright.design.SitePinInst;
 import com.xilinx.rapidwright.design.blocks.PBlock;
-import com.xilinx.rapidwright.device.ClockRegion;
+import com.xilinx.rapidwright.device.BEL;
 import com.xilinx.rapidwright.device.BELClass;
 import com.xilinx.rapidwright.device.BELPin;
-import com.xilinx.rapidwright.device.BEL;
+import com.xilinx.rapidwright.device.ClockRegion;
 import com.xilinx.rapidwright.device.FamilyType;
 import com.xilinx.rapidwright.device.IntentCode;
 import com.xilinx.rapidwright.device.Node;
@@ -651,7 +651,13 @@ public class Router extends AbstractRouter {
 								for(BELPin epin : pin.getBELPin().getSiteConns()){
 									BEL et = epin.getBEL();
 									if(et.getBELClass() == BELClass.RBEL){
-										SitePIP sp = si.getUsedSitePIP(epin);
+										SitePIP sp;
+										try {
+											sp = si.getUsedSitePIP(epin);
+										} catch (RuntimeException e) {
+											System.err.println("could not get used site pips for "+epin+" in "+si+", "+wsp);
+											sp = null;
+										}
 										if(sp != null){
 											for(BELPin src : sp.getInputPin().getSiteConns()){
 												if(!src.isOutput()) continue;
@@ -1711,7 +1717,27 @@ public class Router extends AbstractRouter {
 		}
 		
 	}
-	
+	private void printSpiInfo(SitePinInst spi) {
+		System.out.println("SPI: "+spi);
+		System.out.println("spi.getSiteInst().getName() = " + spi.getSiteInst().getName());
+		System.out.println("spi.getSiteInst().getSiteTypeEnum() = " + spi.getSiteInst().getSiteTypeEnum());
+		System.out.println("spi.getTile() = " + spi.getTile());
+		System.out.println("spi.getSiteInst().getPrimarySiteTypeEnum() = " + spi.getSiteInst().getPrimarySiteTypeEnum());
+		System.out.println("primary name: "+spi.getSiteInst().getPrimarySitePinName(spi.getName()));
+		int wire = spi.getSiteInst().getSite().getTileWireIndexFromPinName(spi.getName());
+		System.out.println("wire: "+ wire);
+		int primaryWire = spi.getSiteInst().getSite().getTileWireIndexFromPinName(spi.getSiteInst().getPrimarySitePinName(spi.getName()));
+		System.out.println("wire by primary: "+ primaryWire);
+
+		if (wire == -1) {
+			wire = primaryWire;
+		}
+		Node node = Node.getNode(spi.getTile(), wire);
+		System.out.println("node = " + node);
+		System.out.println("node.getSitePin() = " + node.getSitePin());
+
+		System.out.println();
+	}
 	public void routeStaticNet(){
 		NetType netType = currNet.getType();
 		// Assume the net is completely un-routed 
@@ -1721,7 +1747,13 @@ public class Router extends AbstractRouter {
 			if(sink.isOutPin()) continue;
 			int watchdog = 10000;
 			int wire = sink.getSiteInst().getSite().getTileWireIndexFromPinName(sink.getName());
-			
+			int primaryWire = sink.getSiteInst().getSite().getTileWireIndexFromPinName(sink.getSiteInst().getPrimarySitePinName(sink.getName()));
+			if (wire == -1 || primaryWire == -1) {
+				printSpiInfo(sink);
+				if (wire == -1) {
+					wire = primaryWire;
+				}
+			}
 			if(wire == -1) {
 				throw new RuntimeException("ERROR: Problem while trying to route static sink " + sink);
 			}
@@ -1741,10 +1773,14 @@ public class Router extends AbstractRouter {
 				visitedNodes.add(n);
 				if(debug) System.out.println("DEQUEUE:" + n);
 				if(success = isThisOurStaticSource(n, netType, debug)) break;
-				for(Wire w : n.getBackwardConnections()){
-					if(w.isRouteThru()) continue;
-					RouteNode nParent = new RouteNode(w.getTile(),w.getWireIndex(), n, n.getLevel()+1);
-					if(!pruneNode(nParent)) q.add(nParent);
+				try {
+					for (Wire w : n.getBackwardConnections()) {
+						if (w.isRouteThru()) continue;
+						RouteNode nParent = new RouteNode(w.getTile(), w.getWireIndex(), n, n.getLevel() + 1);
+						if (!pruneNode(nParent)) q.add(nParent);
+					}
+				} catch (RuntimeException e) {
+					throw new RuntimeException("failed to route "+n, e);
 				}
 				watchdog--;
 				if(watchdog < 0) {
@@ -2113,9 +2149,15 @@ public class Router extends AbstractRouter {
 	 */
 	public static ArrayList<RouteNode> findInputPinFeed(SitePinInst p){
 		Site site = p.getSiteInst().getSite();
-		String pinName = p.getName();
+		String pinName = p.getSiteInst().getPrimarySitePinName(p.getName());
 		Tile t = site.getTile();
-		if(site.isOutputPin(pinName)) return null;
+		try {
+
+
+			if (site.isOutputPin(pinName)) return null;
+		} catch (RuntimeException e) {
+			throw new RuntimeException("Failed to check site "+site.toString()+", pin "+pinName+" for isOutputPin",e);
+		}
 		if(ignoreInputs.contains(pinName)) return null;
 		int watchdog = 1000;
 		int wire = site.getTileWireIndexFromPinName(pinName);
