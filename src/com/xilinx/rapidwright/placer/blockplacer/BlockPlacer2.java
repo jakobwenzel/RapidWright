@@ -566,7 +566,9 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 
 		printMaxColumn(design, "after final");
 
-		graphDataWriter.close();
+		if (graphDataWriter != null) {
+			graphDataWriter.close();
+		}
 		return design;
 	}
 
