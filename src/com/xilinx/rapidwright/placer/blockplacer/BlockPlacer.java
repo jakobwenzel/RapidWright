@@ -319,7 +319,7 @@ public class BlockPlacer extends AbstractBlockPlacer<HardMacro, Site>{
 					currentMove.undoMove();
 					double testCost = currentSystemCost();
 					if(testCost != prevSystemCost){
-						MessageGenerator.briefError("ERROR: Undo move caused improper system cost change: prev=" + prevSystemCost + " incorrect=" + testCost + " move= " + currentMove.toString());
+						MessageGenerator.briefError("ERROR: 1 Undo move caused improper system cost change: prev=" + prevSystemCost + " incorrect=" + testCost + " move= " + currentMove.toString());
 						MessageGenerator.waitOnAnyKeySilent();
 					}
 				}

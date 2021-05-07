@@ -4,7 +4,7 @@ import com.xilinx.rapidwright.edif.EDIFCellInst;
 
 public class ModuleImplsInstance extends AbstractModuleInst<ModuleImplsInstance> {
     final ModuleImpls module;
-    ModulePlacement placement;
+    private ModulePlacement placement;
 
     public ModuleImplsInstance(String name, EDIFCellInst cellInst, ModuleImpls module) {
         super(name, cellInst);
@@ -26,6 +26,7 @@ public class ModuleImplsInstance extends AbstractModuleInst<ModuleImplsInstance>
 
     public void place(ModulePlacement placement) {
         this.placement = placement;
+        boundingBox = null;
     }
 
     public ModuleImpls getModule() {
@@ -56,13 +57,17 @@ public class ModuleImplsInstance extends AbstractModuleInst<ModuleImplsInstance>
                 .getCorresponding(placement.placement.getTile(), getCurrentModuleImplementation().getAnchor().getTile());
     }
 
+    TileRectangle boundingBox = null;
     private TileRectangle getBoundingBox() {
-        TileRectangle efficient = getBoundingBoxEfficient();
+        if (boundingBox == null) {
+            TileRectangle efficient = getBoundingBoxEfficient();
         /*TileRectangle recalc = getBoundingBoxRecalc();
         if (!recalc.equals(efficient)) {
             throw new RuntimeException("differing bounding boxes for "+getName()+" at "+placement+": "+recalc+" vs "+efficient);
         }*/
-        return efficient;
+            this.boundingBox = efficient;
+        }
+        return boundingBox;
     }
 }
 

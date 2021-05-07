@@ -28,8 +28,11 @@ public class BlockPlacer2Module extends BlockPlacer2<HardMacro, Site, Path>{
     private HashMap<Site, HardMacro> currentPlacements;
     private Map<ModuleInst, HardMacro> macroMap;
 
+    public BlockPlacer2Module(Design design, java.nio.file.Path graphData) {
+        super(design, graphData);
+    }
     public BlockPlacer2Module(Design design) {
-        super(design);
+        super(design, null);
     }
 
     @Override
@@ -249,7 +252,7 @@ public class BlockPlacer2Module extends BlockPlacer2<HardMacro, Site, Path>{
             }
 
             if(snks.size() > 0){
-                Path newPath = new Path();
+                Path newPath = new Path(net.getName());
                 newPath.addPin(src, macroMap);
                 for(SitePinInst snk : snks){
                     newPath.addPin(snk, macroMap);
@@ -435,5 +438,12 @@ public class BlockPlacer2Module extends BlockPlacer2<HardMacro, Site, Path>{
         }
 
         return footPrint;
+    }
+
+    @Override
+    protected void ignorePath(Path path) {
+        for (HardMacro hardMacro : hardMacros) {
+            hardMacro.getConnectedPaths().remove(path);
+        }
     }
 }

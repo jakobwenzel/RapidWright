@@ -3,10 +3,11 @@ package com.xilinx.rapidwright.placer.blockplacer;
 import java.util.Objects;
 import java.util.stream.Stream;
 
+import com.xilinx.rapidwright.design.ModuleImplsInstance;
 import com.xilinx.rapidwright.design.TileRectangle;
 import com.xilinx.rapidwright.device.Tile;
 
-public class ImplsPath extends AbstractPath<ImplsInstancePort>{
+public class ImplsPath extends AbstractPath<ImplsInstancePort, ModuleImplsInstance>{
     int length;
 
     public ImplsPath(String name) {
@@ -15,6 +16,9 @@ public class ImplsPath extends AbstractPath<ImplsInstancePort>{
 
     public void addPort(ImplsInstancePort port) {
         ports.add(port);
+        if (port instanceof ImplsInstancePort.InstPort) {
+            moduleInsts.add(((ImplsInstancePort.InstPort) port).getInstance());
+        }
     }
 
 
