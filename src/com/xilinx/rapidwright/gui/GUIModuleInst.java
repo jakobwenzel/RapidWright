@@ -168,9 +168,9 @@ public class GUIModuleInst extends QGraphicsPolygonItem {
 			if (tile.getTileTypeEnum().toString().startsWith("BRAM")
 					|| tile.getTileTypeEnum().toString().startsWith("DSP")) {
 				hmTileMap[tileY][tileX] = true;
-				hmTileMap[tileY - 1][tileX] = true;
+/*				hmTileMap[tileY - 1][tileX] = true;
 				hmTileMap[tileY - 2][tileX] = true;
-				hmTileMap[tileY - 3][tileX] = true;
+				hmTileMap[tileY - 3][tileX] = true;*/
 
 			} else if (tileX >= 0 && tileX < widthInTiles && tileY >= 0
 					&& tileY < heightInTiles) {
