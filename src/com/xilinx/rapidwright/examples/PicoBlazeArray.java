@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -29,8 +31,8 @@ import com.xilinx.rapidwright.edif.EDIFDirection;
 import com.xilinx.rapidwright.edif.EDIFNet;
 import com.xilinx.rapidwright.edif.EDIFNetlist;
 import com.xilinx.rapidwright.placer.blockplacer.BlockPlacer2;
-import com.xilinx.rapidwright.placer.blockplacer.BlockPlacer2ImplsDebug;
-import com.xilinx.rapidwright.placer.blockplacer.BlockPlacer2ModuleDebug;
+import com.xilinx.rapidwright.placer.blockplacer.BlockPlacer2Impls;
+import com.xilinx.rapidwright.placer.blockplacer.BlockPlacer2Module;
 import com.xilinx.rapidwright.placer.handplacer.HandPlacer;
 import com.xilinx.rapidwright.tests.CodePerfTracker;
 import com.xilinx.rapidwright.util.FileTools;
@@ -137,7 +139,7 @@ public class PicoBlazeArray {
 			//Reduce count for debugging
 			System.out.println("bramColumns = " + bramColumns);
 			System.out.println("bramRows = " + bramRows);
-			bramColumns = 1;
+			//bramColumns = 1;
 			//bramRows /= 2;
 
 			Map<String, T> instances = new HashMap<>();
@@ -252,17 +254,19 @@ public class PicoBlazeArray {
 						throw new RuntimeException("ERROR: Couldn't read directory: " + srcDir);
 		}
 		String part = options.valueOf(partOption);
-		String outName = options.valueOf(outOption);
+		Path outName = Paths.get(options.valueOf(outOption));
 		boolean noHandPlacer = options.has(handPlacerOption);
 		boolean useImpls = options.has(implsOption);
 		CodePerfTracker t = new CodePerfTracker("PicoBlaze Array", true).start("Creating design");
 
 
 		PicoBlazeArrayCreator<?> creator;
+
+		Path graphDataFile = FileTools.replaceExtension(outName, "_graph.tsv");
 		if (useImpls) {
 			creator = new PicoBlazeArrayCreator<ModuleImplsInstance>() {
 
-				private BlockPlacer2ImplsDebug placer;
+				private BlockPlacer2Impls placer;
 
 				@Override
 				protected ModuleImplsInstance createInstance(Design design, String name, Module impl, ModuleImpls impls) {
@@ -276,7 +280,7 @@ public class PicoBlazeArray {
 
 				@Override
 				protected BlockPlacer2<ModuleImplsInstance, ?, ?> createPlacer(Design design) {
-					placer = new BlockPlacer2ImplsDebug(design, getInstances(), getMaxTileColumn());
+					placer = new BlockPlacer2Impls(design, graphDataFile, getInstances()/*, getMaxTileColumn()*/);
 					return placer;
 				}
 
@@ -300,7 +304,7 @@ public class PicoBlazeArray {
 
 				@Override
 				protected BlockPlacer2<?, ?, ?> createPlacer(Design design) {
-					return new BlockPlacer2ModuleDebug(design, getMaxTileColumn());
+					return new BlockPlacer2Module(design, graphDataFile/*, getMaxTileColumn()*/);
 				}
 
 				@Override

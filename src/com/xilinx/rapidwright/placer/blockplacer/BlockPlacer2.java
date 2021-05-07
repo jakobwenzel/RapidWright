@@ -24,6 +24,8 @@ package com.xilinx.rapidwright.placer.blockplacer;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,7 +52,9 @@ import com.xilinx.rapidwright.util.MessageGenerator;
  * tends to do better but with longer runtime.
  * @author Chris Lavin
  */
-public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, PlacementT, PathT extends AbstractPath<?>> extends AbstractBlockPlacer<ModuleInstT, PlacementT> {
+public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, PlacementT, PathT extends AbstractPath<?, ModuleInstT>> extends AbstractBlockPlacer<ModuleInstT, PlacementT> {
+	/** Enable extra sanity checks? */
+	protected static final boolean PARANOID = false;
 	/** The current design */
 	protected final Design design;
 	/** The current device being targeted by the design */
@@ -98,16 +102,29 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
     // Update. Added variable to support partial .dcp
     public boolean save_partial_dcp = true;
 
+    private PrintWriter graphDataWriter = null;
+	private double prevSystemCost;
+	private double currSystemCost;
+	private int moveCount;
+	private double bestSoFar;
+
 	/**
 	 * Empty Constructor
 	 *
 	 */
-	public BlockPlacer2(Design design){
+	public BlockPlacer2(Design design, Path graphData){
 		this.design = design;
 		this.dev = design.getDevice();
 		alpha = 1.0;
 		beta = 1.0;
 		seed = 2;
+		if (graphData != null) {
+			try {
+				graphDataWriter = new PrintWriter(Files.newBufferedWriter(graphData));
+			} catch (IOException e) {
+				throw new UncheckedIOException(e);
+			}
+		}
 	}
 
 	/**
@@ -120,6 +137,18 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 
 	abstract List<ModuleInstT> getModuleImpls(boolean debugFlow);
 
+	protected abstract void ignorePath(PathT path);
+	private void findPathsToIgnore() {
+		allPaths.removeIf(path -> {
+			double connectedRatio = (double)path.countConnectedModules()/hardMacros.size();
+			if (connectedRatio > 0.9) {
+				System.out.println("ignoring path "+path.getName()+", connects to "+path.countConnectedModules()+"/"+hardMacros.size()+" = "+connectedRatio);
+				ignorePath(path);
+				return true;
+			}
+			return false;
+		});
+	}
 	/**
 	 * Performs all of the initialization steps to prepare for placement
 	 */
@@ -146,6 +175,8 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 		// Find all port wires
 		//readCriticalNets();
 		populateAllPaths();
+
+		findPathsToIgnore();
 	}
 
 	abstract Collection<PlacementT> getAllPlacements(ModuleInstT hm);
@@ -251,11 +282,19 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 					//System.out.println("start temp not accept");
 					// Undo the move, we are not accepting it
 					currentMove.undoMove();
+					for (PathT path : getConnectedPaths(currentMove.getBlock0())) {
+						path.calculateLength();
+					}
+					if (currentMove.getBlock1() != null) {
+						for (PathT path : getConnectedPaths(currentMove.getBlock1())) {
+							path.calculateLength();
+						}
+					}
 					saveAllCosts();
 					double testCost = currentSystemCost();
 					if(testCost != previousCost){
 						dumpCostChanges();
-						MessageGenerator.briefError("ERROR_startTemp: Undo move caused improper system cost change: prev=" + previousCost + " incorrect=" + testCost + " move= " + currentMove.toString());
+						MessageGenerator.briefError("ERROR_startTemp: gUndo move caused improper system cost change: prev=" + previousCost + " incorrect=" + testCost + " move= " + currentMove.toString());
 						MessageGenerator.waitOnAnyKeySilent();
 					}
 				}
@@ -292,13 +331,16 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 		allPaths.stream().sorted(Comparator.comparing(p->p.getName()))
 				.forEach(path -> {
 					pw.println(path.getName()+": "+path.getLength());
-					path.streamTiles().map(Object::toString).sorted()
-							.forEach(o->pw.println("    "+o));
+					/*path.streamTiles().map(Object::toString).sorted()
+							.forEach(o->pw.println("    "+o));*/
 				});
 	}
 	List<String> costList = new ArrayList<>();
 	private void saveAllCosts() {
-		/*if (costList.size() > 4) {
+		if (currentTemp > -1) {
+			return;
+		}
+		while (costList.size() > 4) {
 			costList.remove(0);
 		}
 		StringWriter sw = new StringWriter();
@@ -306,7 +348,7 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 
 		printAllCosts(pw);
 
-		costList.add(sw.toString());*/
+		costList.add(sw.toString());
 	}
 
 	private void dumpCostChanges() {
@@ -335,6 +377,10 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 	protected abstract Tile getCurrentAnchorTile(ModuleInstT mi);
 
 	protected abstract PlacementT getTempAnchorSite(ModuleInstT mi);
+
+	private void temperatureStep() {
+
+	}
 
 	public Design placeDesign(boolean debugFlow){
 		rand = new Random(seed);
@@ -366,9 +412,9 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 		//initializePlacer(debugFlow);
 		//unplaceDesign();
 		//initialPlacement();
-		double prevSystemCost = currentSystemCost();
-		double currSystemCost = prevSystemCost;
-		double bestSoFar = currSystemCost;
+		prevSystemCost = currentSystemCost();
+		currSystemCost = prevSystemCost;
+		bestSoFar = currSystemCost;
 		rangeLimit = Math.max(dev.getColumns(), dev.getRows());
 		maxInnerIteration = (int)(1 * Math.pow(hardMacros.size(), 1.3333));
 		//maxInnerIteration = (int)(Math.pow(Math.max(dev.getColumns(), dev.getRows()), 1.3333));
@@ -378,96 +424,7 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 		}
 		OUTER: while(!finished){
 			printMaxColumn(design, "loop");
-			currentAcceptedMoveCount = 0;
-			int moveCount = 0;
-			int badMoveCount = 0;
-			int badAcceptedMoveCount = 0;
-			double totalMovesCost = 0.0;
-			for(int inner_iterate = 0; inner_iterate< (maxInnerIteration); inner_iterate++){
-			//for(int inner_iterate = 0; inner_iterate< (10*rangeLimit); inner_iterate++){
-			//for(int inner_iterate = 0; inner_iterate< (dev.getColumns()*dev.getRows()); inner_iterate++){
-				ModuleInstT selectedHD = hardMacros.get(rand.nextInt(hardMacros.size()-1));
-				saveAllCosts();
-				if (getNextMove(selectedHD)){
-					saveAllCosts();
-					totalMoves++;
-					currSystemCost = currentSystemCost();
-					double changeInCost = currSystemCost - prevSystemCost;
-					moveCount++;
-					totalMovesCost += changeInCost;
-					if(currSystemCost < bestSoFar){
-						bestSoFar = currSystemCost;
-						//if (bestSoFar==18875.0){
-							//break OUTER;
-						//}
-					}
-
-					r = rand.nextDouble();
-					int numPath0 = 0;
-					int numPath1 = 0;
-					double tmp =0.0;
-					double AvgChange = 0.0;
-					if(currentMove.getBlock0() != null){
-						for(PathT wire : getConnectedPaths(currentMove.getBlock0())){
-							wire.calculateLength();
-							tmp = tmp + wire.getLength();
-						}
-						numPath0 = getConnectedPaths(currentMove.getBlock0()).size();
-						AvgChange = AvgChange + tmp/numPath0;
-					}
-					tmp =0.0;
-					if(currentMove.getBlock1() != null){
-						for(PathT wire : getConnectedPaths(currentMove.getBlock1())){
-							wire.calculateLength();
-							tmp = tmp + wire.getLength();
-						}
-						numPath1 = getConnectedPaths(currentMove.getBlock1()).size();
-						AvgChange = AvgChange + tmp/numPath1;
-					}
-					int numPaths = Math.max(numPath0, numPath1);
-					//double costChange = (changeInCost)*(numPath0+numPath1);
-					double costChange = (changeInCost);
-					//boolean acceptMove = (r < Math.exp(-changeInCost/(scaleFactor*currentTemp)));
-					//double test_value = Math.exp(-changeInCost/currentTemp);
-					//boolean acceptMove = (r < Math.exp(-changeInCost/currentTemp*numPaths));// good for Mcro with real changeInCost
-					// glodenRate = 0.3 and loop 10* & updateTemp has rangelimit parameter
-					//boolean acceptMove = (r < Math.exp(-changeInCost/currentTemp));
-					//boolean acceptMove = (r < Math.exp(-changeInCost*numPaths/currentTemp));
-					boolean acceptMove = (r < Math.exp(-costChange/currentTemp));
-					//boolean acceptMove = (randomDouble < Math.exp(-AvgChange/currentTemp*numPaths));
-					if(changeInCost > 0) badMoveCount++;
-
-					if(acceptMove){
-						currentAcceptedMoveCount++;
-						prevSystemCost = currSystemCost;
-						if(changeInCost > 0) badAcceptedMoveCount++;
-					}
-					else{
-						// Undo the move, we are not accepting it
-						currentMove.undoMove();
-						saveAllCosts();
-						double testCost = currentSystemCost();
-						if(testCost != prevSystemCost){
-							dumpCostChanges();
-							MessageGenerator.briefError("ERROR: Undo move caused improper system cost change: prev=" + prevSystemCost + " incorrect=" + testCost + " move= " + currentMove.toString());
-							MessageGenerator.waitOnAnyKeySilent();
-						}
-					}
-					//moveAcceptanceRate = ((double)currentAcceptedMoveCount) / moveCount;
-					//moveAcceptanceRate = ((double)currentAcceptedMoveCount) / (Math.min(moveCount, hardMacros.size()));
-				}// Move loop
-
-			}//inner loop
-			if (moveCount>0){
-				moveAcceptanceRate = ((double)currentAcceptedMoveCount) / moveCount;
-			} else {
-				moveAcceptanceRate = 0;
-			}
-			//MOVES = ACCEPTED/TOTAL
-			if (Double.isNaN(currentTemp)) {
-				throw new RuntimeException("nan temperature!");
-			}
-			if(DEBUG_LEVEL > 0) System.out.printf("MOVES:%7d/%7d COST:%7.1f AVG_COST/MOVE:%7.1f TEMP:%7.1f ACCEPTANCE_RATE:%5.1f%% BEST:%7.1f BAD:%4.1f%%\n",currentAcceptedMoveCount,moveCount,prevSystemCost, totalMovesCost/moveCount, currentTemp, moveAcceptanceRate*100, bestSoFar, 100.0*badAcceptedMoveCount/badMoveCount);
+			temperatureStep(maxInnerIteration);
 
 			rangeLimit = rangeLimit * (1.0-goldenRate + moveAcceptanceRate);
 			double upperLimit = Math.max(dev.getColumns(), dev.getRows());
@@ -476,7 +433,7 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 
 			currentTemp = updateTemperature();
 
-			if (currentTemp < 0.005 * (prevSystemCost/allPaths.size())){
+			if (currentTemp < 0.005 * (prevSystemCost /allPaths.size())){
 				finished = true;
 				//WriteFinalCost(prevSystemCost);
 			}
@@ -485,8 +442,9 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 		//Freezing phase
 		prevSystemCost = currentSystemCost();
 		currSystemCost = prevSystemCost;
-		int moveCount = 0;
 		currentTemp = 0.0;
+/*
+		moveCount = 0;
 		for(int inner_iterate = 0; inner_iterate< maxInnerIteration; inner_iterate++){
 
 			ModuleInstT selectedHD = hardMacros.get(rand.nextInt(hardMacros.size()-1));
@@ -517,18 +475,26 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 				else{
 					// Undo the move, we are not accepting it
 					currentMove.undoMove();
+					for (PathT path : getConnectedPaths(currentMove.getBlock0())) {
+						path.calculateLength();
+					}
+					if (currentMove.getBlock1() != null) {
+						for (PathT path : getConnectedPaths(currentMove.getBlock1())) {
+							path.calculateLength();
+						}
+					}
 					saveAllCosts();
 					double testCost = currentSystemCost();
 					if(testCost != prevSystemCost){
 						dumpCostChanges();
-						MessageGenerator.briefError("ERROR: Undo move caused improper system cost change: prev=" + prevSystemCost + " incorrect=" + testCost + " move= " + currentMove.toString());
-						MessageGenerator.waitOnAnyKeySilent();
+						throw new RuntimeException("ERROR: 4 Undo move caused improper system cost change: prev=" + prevSystemCost + " incorrect=" + testCost + " move= " + currentMove.toString());
 					}
 				}
 				moveAcceptanceRate = ((double)currentAcceptedMoveCount) / moveCount;
 			}// Move loop
 
-		}//End of Freezing
+		}//End of Freezing*/
+		temperatureStep(maxInnerIteration);
 
 		// Store final results
 		finalSystemCost = prevSystemCost;
@@ -600,7 +566,160 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 
 		printMaxColumn(design, "after final");
 
+		graphDataWriter.close();
 		return design;
+	}
+
+	private void temperatureStep(int maxInnerIteration) {
+		double r;
+		currentAcceptedMoveCount = 0;
+		moveCount = 0;
+		int badMoveCount = 0;
+		int badAcceptedMoveCount = 0;
+		double totalMovesCost = 0.0;
+		for(int inner_iterate = 0; inner_iterate< maxInnerIteration; inner_iterate++){
+		//for(int inner_iterate = 0; inner_iterate< (10*rangeLimit); inner_iterate++){
+		//for(int inner_iterate = 0; inner_iterate< (dev.getColumns()*dev.getRows()); inner_iterate++){
+			ModuleInstT selectedHD = hardMacros.get(rand.nextInt(hardMacros.size()-1));
+			saveAllCosts();
+
+
+			if (PARANOID) {
+				double testCost = currentSystemCost();
+				if (testCost != prevSystemCost) {
+					dumpCostChanges();
+					MessageGenerator.briefError("ERROR: Improper system cost before creating new move: prev=" + prevSystemCost + " incorrect=" + testCost);
+					MessageGenerator.waitOnAnyKeySilent();
+				}
+			}
+
+			if (getNextMove(selectedHD)){
+				saveAllCosts();
+				totalMoves++;
+				double changeInCost = currentMove.getDeltaCost() * alpha;
+				currSystemCost = prevSystemCost + changeInCost; //TODO Loss of precision?
+				if (PARANOID) {
+					double realCurrentSystemCost = currentSystemCost();
+					if (Math.abs(realCurrentSystemCost - currSystemCost) > 1E-6) {
+						throw new RuntimeException("cost not equal");
+					}
+					double changeInCostRecalc = currSystemCost - prevSystemCost;
+					if (Math.abs(changeInCost - changeInCostRecalc) > 1E-6) {
+						dumpCostChanges();
+						//calcConnectedCost(currentMove.getBlock0(), currentMove.getBlock1())
+						throw new RuntimeException("Cost change differs. Recalc: " + changeInCostRecalc + ", efficient: " + changeInCost + " at move " + totalMoves);
+					}
+				}
+
+
+
+				moveCount++;
+				totalMovesCost += changeInCost;
+				if(currSystemCost < bestSoFar){
+					bestSoFar = currSystemCost;
+					//if (bestSoFar==18875.0){
+						//break OUTER;
+					//}
+				}
+
+				r = rand.nextDouble();
+				int numPath0 = 0;
+				int numPath1 = 0;
+				double tmp =0.0;
+				double AvgChange = 0.0;
+				/*if(currentMove.getBlock0() != null){
+					for(PathT wire : getConnectedPaths(currentMove.getBlock0())){
+						wire.calculateLength();
+						tmp = tmp + wire.getLength();
+					}
+					numPath0 = getConnectedPaths(currentMove.getBlock0()).size();
+					AvgChange = AvgChange + tmp/numPath0;
+				}
+				tmp =0.0;
+				if(currentMove.getBlock1() != null){
+					for(PathT wire : getConnectedPaths(currentMove.getBlock1())){
+						wire.calculateLength();
+						tmp = tmp + wire.getLength();
+					}
+					numPath1 = getConnectedPaths(currentMove.getBlock1()).size();
+					AvgChange = AvgChange + tmp/numPath1;
+				}*/
+				int numPaths = Math.max(numPath0, numPath1);
+				//double costChange = (changeInCost)*(numPath0+numPath1);
+				double costChange = (changeInCost);
+				//boolean acceptMove = (r < Math.exp(-changeInCost/(scaleFactor*currentTemp)));
+				//double test_value = Math.exp(-changeInCost/currentTemp);
+				//boolean acceptMove = (r < Math.exp(-changeInCost/currentTemp*numPaths));// good for Mcro with real changeInCost
+				// glodenRate = 0.3 and loop 10* & updateTemp has rangelimit parameter
+				//boolean acceptMove = (r < Math.exp(-changeInCost/currentTemp));
+				//boolean acceptMove = (r < Math.exp(-changeInCost*numPaths/currentTemp));
+				//boolean acceptMove = (r < Math.exp(-costChange/currentTemp));
+				boolean acceptMove;
+				if (currentTemp == 0.0) {
+					acceptMove = changeInCost < 0;
+				} else {
+					acceptMove = (r < Math.exp(-changeInCost/currentTemp));
+				}
+				//boolean acceptMove = (randomDouble < Math.exp(-AvgChange/currentTemp*numPaths));
+				if(changeInCost > 0) badMoveCount++;
+
+				if(acceptMove){
+					currentAcceptedMoveCount++;
+					prevSystemCost = currSystemCost;
+					if(changeInCost > 0) badAcceptedMoveCount++;
+				}
+				else{
+					// Undo the move, we are not accepting it
+					currentMove.undoMove();
+					for (PathT path : getConnectedPaths(currentMove.getBlock0())) {
+						path.calculateLength();
+					}
+					if (currentMove.getBlock1() != null) {
+						for (PathT path : getConnectedPaths(currentMove.getBlock1())) {
+							path.calculateLength();
+						}
+					}
+					saveAllCosts();
+					if (PARANOID) {
+						double testCost = currentSystemCost();
+						if (testCost != prevSystemCost) {
+							dumpCostChanges();
+							MessageGenerator.briefError("ERROR: 3 Undo move caused improper system cost change: prev=" + prevSystemCost + " incorrect=" + testCost + " move= " + currentMove.toString());
+							MessageGenerator.waitOnAnyKeySilent();
+						}
+					}
+				}
+				//moveAcceptanceRate = ((double)currentAcceptedMoveCount) / moveCount;
+				//moveAcceptanceRate = ((double)currentAcceptedMoveCount) / (Math.min(moveCount, hardMacros.size()));
+			}// Move loop
+
+		}//inner loop
+		if (moveCount >0){
+			moveAcceptanceRate = ((double)currentAcceptedMoveCount) / moveCount;
+		} else {
+			moveAcceptanceRate = 0;
+		}
+		//MOVES = ACCEPTED/TOTAL
+		if (Double.isNaN(currentTemp)) {
+			throw new RuntimeException("nan temperature!");
+		}
+
+
+		if (graphDataWriter != null) {
+			graphDataWriter.printf(
+					"%7d\t%7d\t%7.1f\t%7.1f\t%7.1f\t%5.1f\t%7.1f\t%4.1f\t%f\n",
+					currentAcceptedMoveCount,
+					moveCount,
+					prevSystemCost,
+					totalMovesCost/ moveCount,
+					currentTemp,
+					moveAcceptanceRate*100,
+					bestSoFar,
+					100.0*badAcceptedMoveCount/badMoveCount,
+					rangeLimit
+			);
+		}
+		if(DEBUG_LEVEL > 0) System.out.printf("MOVES:%7d/%7d COST:%7.1f AVG_COST/MOVE:%7.1f TEMP:%7.1f ACCEPTANCE_RATE:%5.1f%% BEST:%7.1f BAD:%4.1f%%\n",currentAcceptedMoveCount, moveCount, prevSystemCost, totalMovesCost/ moveCount, currentTemp, moveAcceptanceRate*100, bestSoFar, 100.0*badAcceptedMoveCount/badMoveCount);
 	}
 
 	protected abstract int getTileSize(ModuleInstT hm);
@@ -626,6 +745,36 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 	protected abstract boolean isInRange(PlacementT current, PlacementT newPlacement);
 
 
+	private int calcConnectedCost(ModuleInstT hm0, ModuleInstT hm1, String situation) {
+		//StringBuilder sb = new StringBuilder();
+		//sb.append("connected cost in ").append(situation).append('\n');
+		//sb.append("hm0: ").append(hm0.getName()).append(": ").append(getCurrentPlacement(hm0)).append('\n');
+		//if (hm1!=null) {
+		//	sb.append("hm1: ").append(hm1.getName()).append(": ").append(getCurrentPlacement(hm1)).append('\n');
+		//}
+		int cost = 0;
+		for (PathT objects : getConnectedPaths(hm0)) {
+			objects.calculateLength();
+			int length = objects.getLength();
+			//sb.append(path.getName()).append("for hm0, length ").append(length).append("\n");
+			cost+= length;
+		}
+		if (hm1 != null) {
+			for (PathT path : getConnectedPaths(hm1)) {
+				if (path.connectsTo(hm0)) {
+					//sb.append(path.getName()).append("for hm1 not added, as it was seen in hm0 already\n");
+					//We have already counted the path in the above loop. Don't double count it!
+					continue;
+				}
+				path.calculateLength();
+				int length = path.getLength();
+				//sb.append(path.getName()).append("for hm1, length ").append(length).append("\n");
+				cost += length;
+			}
+		}
+		//costList.add(sb.toString());
+		return cost;
+	}
 
 	private boolean getNextMove(ModuleInstT selected){
 		//HardMacro selected = hardMacros.get(rand.nextInt(hardMacros.size()-1));
@@ -663,6 +812,7 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 		//System.out.println("we want to move "+selected.getName()+", currently at "+getCurrentPlacement(selected)+", it has "+validSites.size()+" possible placements, "+nr_valid_sites+" valid");
 
 		PlacementT site1Previous = null;
+		int costBefore = 0;
 		while(true){
 			/*if(iterations > 10*validSites.size()){
 				selected = hardMacros.get(rand.nextInt(hardMacros.size()-1));
@@ -699,7 +849,11 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 			}
 			//TODO this only works when the same anchor is chosen for the other variant?
 			hm1 = getHmCurrentlyAtPlacement(site1);
+			if (hm1 == hm0) {
+				hm1 = null;
+			}
 
+			costBefore = calcConnectedCost(hm0, hm1, "Before move");
 
 			if(hm1 != null){
 				site1Previous = getCurrentPlacement(hm1);
@@ -732,6 +886,8 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 			}
 		}
         currentMove.setMove(site0, site1, hm0, hm1, site1Previous);
+		int costAfter = calcConnectedCost(hm0, hm1, "After Move");
+		currentMove.setDeltaCost(costAfter - costBefore);
 		return true;
 	}
 
@@ -758,7 +914,7 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 
 	protected double currentSystemCost(){
 		int totalWireLength = 0;
-		double tmp = 0.0;
+		/*int tmp = 0;
 		if(currentMove.getBlock0() != null){
 			for(PathT wire : getConnectedPaths(currentMove.getBlock0())){
 				wire.calculateLength();
@@ -766,16 +922,23 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 			}
 			//System.out.println(currentMove.block0.getName()+":"+currentMove.block0.getConnectedPaths().size());
 		}
-		tmp = 0.0;
+		tmp = 0;
 		if(currentMove.getBlock1() != null){
 			for(PathT wire : getConnectedPaths(currentMove.getBlock1())){
 				wire.calculateLength();
 				tmp = tmp + wire.getLength();
 			}
 			//System.out.println(currentMove.block1.getName()+":"+currentMove.block1.getConnectedPaths().size());
-		}
+		}*/
 		int maxPathLength = 0;
 		for(PathT path : allPaths){
+			if (PARANOID) {
+				int prevLength = path.getLength();
+				path.calculateLength();
+				if (path.getLength() != prevLength) {
+					throw new RuntimeException("Path was not up to date: "+path.getName()+" was "+prevLength+", but changed to "+path.getLength()+" when recalculated");
+				}
+			}
 			totalWireLength += path.getLength();
 			if(path.getLength() > maxPathLength){
 				maxPathLength = path.getLength();

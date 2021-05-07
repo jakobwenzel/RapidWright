@@ -36,8 +36,8 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
 
     private final Map<ModuleImplsInstance, Set<ImplsPath>> modulesToPaths = new HashMap<>();
 
-    public BlockPlacer2Impls(Design design, List<ModuleImplsInstance> moduleInstances) {
-        super(design);
+    public BlockPlacer2Impls(Design design, java.nio.file.Path graphData, List<ModuleImplsInstance> moduleInstances) {
+        super(design, graphData);
         this.moduleInstances = Collections.unmodifiableList(moduleInstances);
     }
 
@@ -253,4 +253,10 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
         //dumpDot(Paths.get("/tmp/initial.dot"));
     }
 
+    @Override
+    protected void ignorePath(ImplsPath path) {
+        for (Set<ImplsPath> value : modulesToPaths.values()) {
+            value.remove(path);
+        }
+    }
 }

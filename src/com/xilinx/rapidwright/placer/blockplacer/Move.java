@@ -40,8 +40,9 @@ public class Move<ModuleInstT extends AbstractModuleInst<?>, PlacementT> {
 	private ModuleInstT block0;
 	
 	private ModuleInstT block1;
+	private int deltaCost;
 
-	
+
 	public Move(AbstractBlockPlacer<ModuleInstT, PlacementT> placer){
 
 		this.placer = placer;
@@ -108,4 +109,11 @@ public class Move<ModuleInstT extends AbstractModuleInst<?>, PlacementT> {
 	}
 
 
+	public void setDeltaCost(int deltaCost) {
+		this.deltaCost = deltaCost;
+	}
+
+	public int getDeltaCost() {
+		return deltaCost;
+	}
 }

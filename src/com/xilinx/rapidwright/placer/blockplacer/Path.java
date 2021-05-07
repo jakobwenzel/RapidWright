@@ -36,15 +36,23 @@ import com.xilinx.rapidwright.device.Tile;
  * @author clavin
  *
  */
-public class Path extends AbstractPath<PathPort>{
+public class Path extends AbstractPath<PathPort, HardMacro>{
 	// TODO - we should fix this to cover all the boards, UltraScla HRIO column is 175
 	protected final int crossingColumn = 175;
+	private final String name;
 
 	// Half Perimeter Wire Length
 	protected int hpwl;
 	protected ArrayList<Integer> delay;
 	protected int maxDelay;
 
+	public Path(String name) {
+		this.name = name;
+	}
+
+	public Path() {
+		this.name = null;
+	}
 
 	public int getLength(){
 		return hpwl;
@@ -92,7 +100,7 @@ public class Path extends AbstractPath<PathPort>{
 
 	@Override
 	public String getName() {
-		return null;
+		return name;
 	}
 
 	@Override
@@ -191,6 +199,9 @@ public class Path extends AbstractPath<PathPort>{
 			pp.setColumnOffset(anchorTile.getColumn() - sourceTile.getColumn());
 		}
 		ports.add(pp);
+		if (pp.getBlock() != null) {
+			moduleInsts.add(pp.getBlock());
+		}
 	}
 
 	public PathPort get(int index) {
