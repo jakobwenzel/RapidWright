@@ -22,11 +22,11 @@
  */
 package com.xilinx.rapidwright.util;
 
-import java.util.HashSet;
-
 import com.xilinx.rapidwright.design.SiteInst;
 import com.xilinx.rapidwright.device.SiteTypeEnum;
 import com.xilinx.rapidwright.device.TileTypeEnum;
+
+import java.util.HashSet;
 
 /**
  * This is a helper class for creating PrimitiveTypes and TileTypes
@@ -305,8 +305,7 @@ public class Utils{
 		moduleSiteTypes.add(SiteTypeEnum.FIFO36E1);
 		moduleSiteTypes.add(SiteTypeEnum.DSP48E1);
 		moduleSiteTypes.add(SiteTypeEnum.DSP48E2);
-		moduleSiteTypes.add(SiteTypeEnum.BUFGCE);
-//		moduleSiteTypes.add(SiteTypeEnum.PS7);	
+//		moduleSiteTypes.add(SiteTypeEnum.PS7);
 		
 		sliceTypes = new HashSet<SiteTypeEnum>();
 		sliceTypes.add(SiteTypeEnum.SLICEL);
