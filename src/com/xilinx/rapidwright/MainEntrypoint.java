@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.xilinx.rapidwright.benchmark.BenchmarkRunner;
 import com.xilinx.rapidwright.debug.DesignInstrumentor;
 import com.xilinx.rapidwright.debug.ILAInserter;
 import com.xilinx.rapidwright.debug.ProbeRouter;
@@ -69,6 +70,7 @@ import com.xilinx.rapidwright.util.PerformanceExplorer;
 import com.xilinx.rapidwright.util.RapidWright;
 import com.xilinx.rapidwright.util.StringTools;
 import com.xilinx.rapidwright.util.Unzip;
+import com.xilinx.rapidwright.util.performance_evaluation.PerformanceEvaluation;
 import com.xilinx.rapidwright.verilogModules.VerilogStitcher;
 
 public class MainEntrypoint {
@@ -86,6 +88,7 @@ public class MainEntrypoint {
 
     static {
         addFunction("AddSubGenerator", AddSubGenerator::main);
+        addFunction("BenchmarkRunner", BenchmarkRunner::main);
         addFunction("BlockCreator", BlockCreator::main);
         addFunction("BlockStitcher", BlockStitcher::main);
         addFunction("BlockUpdater", BlockUpdater::main);
@@ -125,6 +128,7 @@ public class MainEntrypoint {
         addFunction("PBlockGenDebugger", PBlockGenDebugger::main);
         addFunction("PBlockGenerator", PBlockGenerator::main);
         addFunction("PBlock", PBlock::main);
+        addFunction("PerformanceEvaluation", PerformanceEvaluation::main);
         addFunction("PerformanceExplorer", PerformanceExplorer::main);
         addFunction("PhysicalNetlistExample", PhysicalNetlistExample::main);
         addFunction("PhysicalNetlistToDcp", PhysicalNetlistToDcp::main);
@@ -170,7 +174,7 @@ public class MainEntrypoint {
         String mode = args[0];
         MainStyleFunction<?> func = functions.get(mode.toLowerCase());
         if (func == null) {
-            System.err.println("Invalid mode. Valid modes are (case-insensitive): ");
+            System.err.println("Invalid mode '"+mode+"'. Valid modes are (case-insensitive): ");
             listModes();
             System.exit(1);
         }
