@@ -41,16 +41,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import com.xilinx.rapidwright.design.Design;
 import com.xilinx.rapidwright.design.Module;
 import com.xilinx.rapidwright.design.ModuleCache;
 import com.xilinx.rapidwright.design.ModuleImpls;
+import com.xilinx.rapidwright.design.Net;
+import com.xilinx.rapidwright.design.Port;
 import com.xilinx.rapidwright.design.SiteInst;
+import com.xilinx.rapidwright.design.SitePinInst;
 import com.xilinx.rapidwright.design.blocks.BlockGuide;
 import com.xilinx.rapidwright.design.blocks.ImplGuide;
 import com.xilinx.rapidwright.design.blocks.PBlock;
 import com.xilinx.rapidwright.design.blocks.SubPBlock;
+import com.xilinx.rapidwright.device.BELPin;
 import com.xilinx.rapidwright.device.Device;
 import com.xilinx.rapidwright.edif.EDIFNetlist;
 import com.xilinx.rapidwright.edif.EDIFTools;
@@ -116,6 +121,9 @@ public class BlockCreator {
 
 			m.setDevice(d.getDevice());
 			m.calculateAllValidPlacements(d.getDevice());
+
+			fixupModuleOutputs(m);
+
 			modImpls.add(m);
 			
 			// Store PBlock with Module Here
@@ -134,7 +142,39 @@ public class BlockCreator {
 		}
 		return modImpls;
 	}
-	
+
+	/**
+	 * Vivado may create Module output ports on a Slice's COUT Pin. This is not routable, so we try to move to another
+	 * Slice Pin.
+	 * @param m Module
+	 */
+	private static void fixupModuleOutputs(Module m) {
+		final Map<SitePinInst, List<Port>> portsToChange = m.getPorts().stream()
+				.filter(port -> port.isOutPort())
+				.filter(port -> port.getSingleSitePinInst() != null)
+				.filter(port -> port.getSingleSitePinInst().getName().equals("COUT"))
+				.collect(Collectors.groupingBy(Port::getSingleSitePinInst));
+		portsToChange.forEach((sitePinInst, ports) -> {
+
+			final Net existingNet = sitePinInst.getSiteInst().getNetFromSiteWire("HMUX");
+			if (existingNet != null) {
+				throw new RuntimeException("Can not redirect carry out of "+ports+", sourced at "+sitePinInst+", because pin is already used for net "+existingNet);
+			}
+
+			sitePinInst.setPinName("HMUX");
+
+
+			BELPin srcPin = sitePinInst.getSiteInst().getBEL("CARRY8").getPin("CO7");
+			BELPin sinkPin = sitePinInst.getBELPin();
+
+			if (!sitePinInst.getSiteInst().routeIntraSiteNet(sitePinInst.getNet(), srcPin, sinkPin)) {
+				throw new RuntimeException("Failed to route in site");
+			}
+
+			System.out.println("Moved COUT Pin to "+sitePinInst+", connected to "+ports.get(0).getName());
+		});
+	}
+
 	private static ArrayList<String> getRoutedDCPFileNames(String routedDCPFileName, int blockImplCount){
 		ArrayList<String> routedDCPFileNames = new ArrayList<String>();
 		if(blockImplCount == 1){
@@ -274,7 +314,7 @@ public class BlockCreator {
 				if(new File(pblockFileName).exists()){
 					ArrayList<String> pBlockLines = FileTools.getLinesFromTextFile(pblockFileName);
 					if (pBlockLines.get(0).startsWith("PBlockGenerator Failed!")) {
-						throw new RuntimeException(String.join("\n", pBlockLines) +"\n for "+pblockFileName);
+						throw new RuntimeException("in " + cacheID+" "+String.join("\n", pBlockLines) +"\n for "+pblockFileName);
 					}
 					for(String pblock : pBlockLines){
 						if(pblock.startsWith("#")) continue;
@@ -369,7 +409,7 @@ public class BlockCreator {
 		}
 		
 		if(halt){
-			MessageGenerator.briefErrorAndExit("ERROR: Failure to generate all necessary OOC DCPs.  "
+			throw new RuntimeException("ERROR: Failure to generate all necessary OOC DCPs.  "
 				+ "Please see error messages and logs above to resolve issues in order to continue.");
 		}
 	}
@@ -504,6 +544,7 @@ public class BlockCreator {
 		Objects.requireNonNull(edifFileName);
 		Objects.requireNonNull(cellInstanceName);
 		Objects.requireNonNull(xciFileName);
+		Objects.requireNonNull(routedDCPFileName);
 		String uniqueFileName = getUniqueFileName(xciFileName);
 		String cacheID = xciFileName.replace(".xci", "");
 		cacheID = cacheID.substring(cacheID.lastIndexOf('/')+1, cacheID.length());

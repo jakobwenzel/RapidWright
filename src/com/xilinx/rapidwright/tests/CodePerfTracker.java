@@ -124,6 +124,7 @@ public class CodePerfTracker {
 		this.verbose = verbose;
 	}
 
+	boolean running = false;
 	public CodePerfTracker start(String segmentName){
 		if(!GLOBAL_DEBUG) return this;
 		int idx = runtimes.size();
@@ -132,10 +133,15 @@ public class CodePerfTracker {
 		segmentNames.add(segmentName);
 		memUsages.add(currUsage);
 		runtimes.add(System.nanoTime());
+		running = true;
 		return this;
 	}
 	
 	public CodePerfTracker stop(){
+		if (!running) {
+			return this;
+		}
+		running = false;
 		if(!GLOBAL_DEBUG) return this;
 		long end = System.nanoTime();
 		int idx = runtimes.size()-1;
@@ -218,5 +224,18 @@ public class CodePerfTracker {
 			}
 			print(i);
 		}
+	}
+
+	public int getSegmentCount() {
+		return runtimes.size();
+	}
+	public String getSegmentName(int i) {
+		return segmentNames.get(i);
+	}
+	public long getRuntime(int i) {
+		return runtimes.get(i);
+	}
+	public long getMemUsage(int i) {
+		return memUsages.get(i);
 	}
 }

@@ -78,7 +78,7 @@ public class DotModuleImplsDumper extends DotGraphDumper<ModuleImplsInstance, Im
     }
 
     @Override
-    protected Map<?, ?> getInstanceProperties(ModuleImplsInstance instance) {
+    protected Map<?, ?> getInstanceProperties(ModuleImplsInstance instance, ModuleImplsDumpData design) {
         return null;
     }
 

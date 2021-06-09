@@ -76,6 +76,7 @@ public class PBlockGenerator {
 	/** X dimension over Y dimension */
 	public float ASPECT_RATIO = 0.125f;//1.5f;	
 	public float OVERHEAD_RATIO = 1.5f;//1.25f;
+	public float OVERHEAD_RATIO_LUTRAM = 1.5f;//1.25f;
 	public int STARTING_X = -1;	    // Parameterized with command line argument when present.
 	public int STARTING_Y = -1;		// Parameterized with command line argument when present.
 	public int PBLOCK_COUNT = 1;
@@ -169,6 +170,7 @@ public class PBlockGenerator {
 			System.out.println("  Device: " + dev.getName());
 			System.out.println("    LUTs: " + lutCount);
 			System.out.println("    DSPs: " + dspCount);
+			System.out.println(" LUTRams: " + lutRAMCount);
 			System.out.println("18kBRAMs: " + bram18kCount);
 			System.out.println("36kBRAMs: " + bram36kCount);
 		} 
@@ -825,7 +827,7 @@ public class PBlockGenerator {
 			dspsRequired++;
 		} 
 		int ramb36sRequired = bram36kCount + (int)Math.ceil((float)bram18kCount / 2.0);
-		int sliceMsRequired = (int)Math.ceil((float)lutRAMCount / (float)RAMLUTS_PER_CLE); // Not multiplying with SLICES_PER_TILE, as in one M-CLB Tile, there is only one slice having LUTRAM 
+		int sliceMsRequired = (int)Math.ceil((float)lutRAMCount * OVERHEAD_RATIO_LUTRAM/ (float)RAMLUTS_PER_CLE); // Not multiplying with SLICES_PER_TILE, as in one M-CLB Tile, there is only one slice having LUTRAM
 		
 		// now compute Nr slices. If nr of FF & carry slices is smaller than current total nr of slices given by LUTs, than these could be mapped in the same slices. 
 		// Update if more slices are needed for FF & carry
@@ -915,7 +917,15 @@ public class PBlockGenerator {
 				}
 			}
 		}
-		
+
+
+		if(debug) {
+			System.out.println("slicesRequired = " + slicesRequired);
+			System.out.println("sliceMsRequired = " + sliceMsRequired);
+			System.out.println("pblockCLEHeight = " + pblockCLEHeight);
+			System.out.println("numSLICEColumns = " + numSLICEColumns);
+			System.out.println("numSLICEMColumns = " + numSLICEMColumns);
+		}
 		// Fail safe in case we get too short, make sure shapes (carry chains,etc) can fit 
 		if(tallestShape > pblockCLEHeight){
 			pblockCLEHeight = tallestShape;
@@ -1122,6 +1132,16 @@ public class PBlockGenerator {
 			}
 			pBlocks.add(sb.toString());
 			if(trivial) break;
+		}
+		if(dspCLECount == 0 && bramCLECount == 0) {
+			// ASPECT_RATIO = width(X) / height(Y)
+			// width = ASPECT_RATIO * height
+			// AREA (slices required) = width * height
+			// AREA = ASPECT_RATIO * height^2
+			// height = sqrt ( AREA / height )
+			if (sliceMsRequired != 0) {
+				//throw new RuntimeException("debug");
+			}
 		}
 		return pBlocks;
 	}

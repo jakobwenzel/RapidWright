@@ -4,9 +4,9 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -19,26 +19,34 @@ import java.util.stream.Collectors;
 import com.xilinx.rapidwright.design.AbstractModuleInst;
 import com.xilinx.rapidwright.design.Cell;
 import com.xilinx.rapidwright.design.Design;
+import com.xilinx.rapidwright.design.ModuleImpls;
 import com.xilinx.rapidwright.design.ModuleImplsInstance;
 import com.xilinx.rapidwright.design.ModulePlacement;
 import com.xilinx.rapidwright.design.SitePinInst;
-import com.xilinx.rapidwright.design.TileRectangle;
 import com.xilinx.rapidwright.device.Site;
 import com.xilinx.rapidwright.device.Tile;
 import com.xilinx.rapidwright.edif.EDIFCellInst;
 import com.xilinx.rapidwright.edif.EDIFNet;
 import com.xilinx.rapidwright.edif.EDIFPortInst;
 
-public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModulePlacement, ImplsPath> {
+public class BlockPlacer2Impls extends BlockPlacer2<ModuleImpls, ModuleImplsInstance, ModulePlacement, ImplsPath> {
 
     private final List<ModuleImplsInstance> moduleInstances;
     private Map<Site, ModuleImplsInstance> currentAnchors = new HashMap<>();
 
+    private final OverlapCache overlaps;
+
     private final Map<ModuleImplsInstance, Set<ImplsPath>> modulesToPaths = new HashMap<>();
 
-    public BlockPlacer2Impls(Design design, java.nio.file.Path graphData, List<ModuleImplsInstance> moduleInstances) {
-        super(design, graphData);
-        this.moduleInstances = Collections.unmodifiableList(moduleInstances);
+    public BlockPlacer2Impls(Design design, Collection<ModuleImplsInstance> moduleInstances, boolean ignoreMostUsedNets, Path graphData, int overlapSize) {
+        super(design, ignoreMostUsedNets, graphData);
+
+        this.moduleInstances = new ArrayList<>(moduleInstances);
+        overlaps = new OverlapCache(design.getDevice(), moduleInstances, overlapSize);
+    }
+
+    public BlockPlacer2Impls(Design design, Collection<ModuleImplsInstance> moduleInstances, boolean ignoreMostUsedNets, Path graphData) {
+        this(design, moduleInstances, ignoreMostUsedNets, graphData, OverlapCache.DEFAULT_SIZE);
     }
 
     @Override
@@ -69,7 +77,10 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
 
     @Override
     void placeHm(ModuleImplsInstance hm, ModulePlacement placement) {
-        unplaceHm(hm);
+        if (hm.getPlacement() != null) {
+            currentAnchors.remove(hm.getPlacement().placement);
+            overlaps.unPlace(hm);
+        }
         if (!currentAnchors.containsKey(placement.placement)) {
             currentAnchors.put(placement.placement, hm);
         }
@@ -78,11 +89,13 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
             throw new RuntimeException("Placing module "+hm.getName()+" at anchor "+placement.placement+", but "+alreadyAtAnchor.getName()+" is already there");
         }*/
         hm.place(placement);
+        overlaps.place(hm);
     }
 
     @Override
     void unplaceHm(ModuleImplsInstance hm) {
         if (hm.getPlacement() != null) {
+            overlaps.unPlace(hm);
             currentAnchors.remove(hm.getPlacement().placement);
         }
         hm.unPlace();
@@ -94,7 +107,7 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
             Cell cell = edifToPhysical.get(cellInst);
             ModuleImplsInstance module = edifToModule.get(cellInst);
             if (cell == null && module == null) {
-                if (cellInst.getName().equals("VCC")) {
+                if (cellInst.getName().equals("VCC") || cellInst.getName().equals("GND")) {
                     return null;
                 }
                 throw new RuntimeException("No physical representation of EDIF cellinst " + cellInst.getName());
@@ -117,7 +130,7 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
                 }
                 return new ImplsInstancePort.SPI(spi);
             } else {
-                return new ImplsInstancePort.InstPort(module, portInst.getName());
+                return module.getPort(portInst.getName());
             }
         } else {
             return null; //TODO???
@@ -133,7 +146,7 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
             Cell cell = edifToPhysical.get(cellInst);
             ModuleImplsInstance module = edifToModule.get(cellInst);
             if (cell == null && module == null) {
-                if (!cellInst.getName().equals("VCC")) {
+                if (!cellInst.getName().equals("VCC") && !cellInst.getName().equals("GND")) {
                     throw new RuntimeException("No physical representation of EDIF cellinst " + cellInst.getName());
                 }
             } else if (cell != null && module != null) {
@@ -166,11 +179,24 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
 
     @Override
     protected boolean checkValidPlacement(ModuleImplsInstance hm) {
-        final boolean debugValidPlacement = false;
         if (hm.getPlacement() == null) {
-            if (debugValidPlacement) System.out.println("not valid because "+hm.getName()+" is unplaced");
             return false;
         }
+
+        final boolean newWay = overlaps.isValidPlacement(hm);
+
+        /*final boolean legacy = checkValidPlacementLegacy(hm);
+        if (legacy != newWay) {
+            System.out.println("Failed: "+legacy+" vs "+newWay);
+            overlaps.isValidPlacement(hm);
+            checkValidPlacementLegacy(hm);
+            throw new RuntimeException("oops");
+        }*/
+        return newWay;
+    }
+
+    private boolean checkValidPlacementLegacy(ModuleImplsInstance hm) {
+        final boolean debugValidPlacement = false;
         for(ModuleImplsInstance other : hardMacros){
             if (other == hm) {
                 continue;
@@ -179,12 +205,12 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
                 continue;
             }
             if (hm.getPlacement().placement == other.getPlacement().placement) {
-                if (debugValidPlacement) System.out.println("not valid because "+hm.getName()+" has same anchor as "+other.getName()+": "+hm.getPlacement().placement);
+                if (debugValidPlacement) System.out.println("not valid because "+ hm.getName()+" has same anchor as "+other.getName()+": "+ hm.getPlacement().placement);
 
                 return false;
             }
             if (hm.overlaps(other)){
-                if (debugValidPlacement) System.out.println("not valid because "+hm.getName()+" overlaps "+other.getName());
+                if (debugValidPlacement) System.out.println("not valid because "+ hm.getName()+" overlaps "+other.getName());
                 return false;
             }
         }
@@ -194,7 +220,13 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
     @Override
     protected void doFinalPlacement() {
 
+        overlaps.printStats();
         //throw new RuntimeException("not implemented");
+    }
+
+    @Override
+    protected void checkForOverlaps() {
+        overlaps.printStats();
     }
 
     @Override
@@ -212,11 +244,12 @@ public class BlockPlacer2Impls extends BlockPlacer2<ModuleImplsInstance, ModuleP
 
     @Override
     protected boolean isInRange(ModulePlacement current, ModulePlacement newPlacement) {
+        return getDistance(current.placement.getTile(), newPlacement.placement.getTile()) <= rangeLimit;
+    }
 
-        //TODO caching?
-        TileRectangle rect = TileRectangle.fromSingleTile(current.placement.getTile()).expand((int) rangeLimit);
-        return rect.isInside(newPlacement.placement.getTile());
-
+    @Override
+    protected Tile getPlacementTile(ModulePlacement placement) {
+        return placement.placement.getTile();
     }
 
     @Override

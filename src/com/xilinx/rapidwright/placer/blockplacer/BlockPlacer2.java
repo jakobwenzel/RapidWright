@@ -33,14 +33,18 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Random;
 import java.util.Set;
 
 import com.xilinx.rapidwright.design.AbstractModuleInst;
 import com.xilinx.rapidwright.design.Design;
+import com.xilinx.rapidwright.design.SimpleTileRectangle;
+import com.xilinx.rapidwright.design.TileRectangle;
 import com.xilinx.rapidwright.device.Device;
 import com.xilinx.rapidwright.device.Site;
 import com.xilinx.rapidwright.device.SiteTypeEnum;
@@ -52,7 +56,7 @@ import com.xilinx.rapidwright.util.MessageGenerator;
  * tends to do better but with longer runtime.
  * @author Chris Lavin
  */
-public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, PlacementT, PathT extends AbstractPath<?, ModuleInstT>> extends AbstractBlockPlacer<ModuleInstT, PlacementT> {
+public abstract class BlockPlacer2<ModuleT, ModuleInstT extends AbstractModuleInst<ModuleT, ?>, PlacementT, PathT extends AbstractPath<?, ModuleInstT>> extends AbstractBlockPlacer<ModuleInstT, PlacementT> {
 	/** Enable extra sanity checks? */
 	protected static final boolean PARANOID = false;
 	/** The current design */
@@ -99,6 +103,8 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 	private final double alpha;
 	private final double beta;
 
+	private final boolean ignoreMostUsedNets;
+
     // Update. Added variable to support partial .dcp
     public boolean save_partial_dcp = true;
 
@@ -108,13 +114,16 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 	private int moveCount;
 	private double bestSoFar;
 
+	private Map<ModuleT, PlacementCollection<PlacementT>> possiblePlacements;
+
 	/**
 	 * Empty Constructor
 	 *
 	 */
-	public BlockPlacer2(Design design, Path graphData){
+	public BlockPlacer2(Design design, boolean ignoreMostUsedNets, Path graphData){
 		this.design = design;
 		this.dev = design.getDevice();
+		this.ignoreMostUsedNets = ignoreMostUsedNets;
 		alpha = 1.0;
 		beta = 1.0;
 		seed = 2;
@@ -152,7 +161,7 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 	/**
 	 * Performs all of the initialization steps to prepare for placement
 	 */
-	private void initializePlacer(boolean debugFlow){
+	public void initializePlacer(boolean debugFlow){
 		//currentPlacements = new HashMap<Site, HardMacro>();
 		currentMove = new Move<>(this);
 		totalMoves = 0;
@@ -176,9 +185,18 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 		//readCriticalNets();
 		populateAllPaths();
 
-		findPathsToIgnore();
+		if (ignoreMostUsedNets) {
+			findPathsToIgnore();
+		}
 	}
 
+	/**
+	 * All Placements of a hard macro. MUST BE SORTED BY TILE COLUMN!
+	 *
+	 * Order is used for speeding up applying the range limit
+	 * @param hm macro
+	 * @return possible placements, ordered by column
+	 */
 	abstract Collection<PlacementT> getAllPlacements(ModuleInstT hm);
 	abstract void unsetTempAnchorSite(ModuleInstT hm);
 	abstract Comparator<PlacementT> getInitialPlacementComparator();
@@ -192,19 +210,29 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 			}
 
 			System.out.println("Pre-placed design! Cost: "+currentSystemCost());
+			unplaceDesign();
 		}
+
+		possiblePlacements = new HashMap<>();
 
 		// Place hard macros for initial placement
 		for(ModuleInstT hm : hardMacros){
 			PriorityQueue<PlacementT> sites = new PriorityQueue<>(1024, getInitialPlacementComparator());
-			sites.addAll(getAllPlacements(hm));
+			final Collection<PlacementT> allPlacements = getAllPlacements(hm);
+			possiblePlacements.put(hm.getModule(), allPlacements.stream().collect(PlacementCollection.collector(this::getPlacementTile)));
+			sites.addAll(allPlacements);
+			boolean found = false;
 			while(!sites.isEmpty()){
 				PlacementT site = sites.remove();
 				setTempAnchorSite(hm, site);
 				if(checkValidPlacement(hm)){
 					placeHm(hm, site);
+					found = true;
 					break;
 				}
+			}
+			if (!found) {
+				throw new RuntimeException("no initial place for "+hm.getName());
 			}
 			/*for(Site site : hm.getValidPlacements()){
 				hm.setTempAnchorSite(site, currentPlacements);
@@ -217,6 +245,8 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 				}
 			}*/
 		}
+
+		checkForOverlaps();
 		// We have p
 		for(PathT path : allPaths){
 			path.calculateLength();
@@ -225,9 +255,14 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 		ArrayList<ModuleInstT> prunedList = new ArrayList<>();
 		for(ModuleInstT hm : new ArrayList<>(hardMacros)){
 			if(getAllPlacements(hm).size() > 2) prunedList.add(hm);
+			else {
+				System.err.println("Not adding HM since it only has one placement: "+hm.getName());
+			}
 		}
 		hardMacros = prunedList;
 	}
+
+	protected abstract void checkForOverlaps();
 
 	private void unplaceDesign(){
 		//currentPlacements = new HashMap<Site, HardMacro>();
@@ -377,10 +412,6 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 	protected abstract Tile getCurrentAnchorTile(ModuleInstT mi);
 
 	protected abstract PlacementT getTempAnchorSite(ModuleInstT mi);
-
-	private void temperatureStep() {
-
-	}
 
 	public Design placeDesign(boolean debugFlow){
 		rand = new Random(seed);
@@ -778,10 +809,10 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 		return cost;
 	}
 
+	protected abstract Tile getPlacementTile(PlacementT placement);
+
 	private boolean getNextMove(ModuleInstT selected){
 		//HardMacro selected = hardMacros.get(rand.nextInt(hardMacros.size()-1));
-		Collection<PlacementT> validSites = getAllPlacements(selected);
-		ArrayList<PlacementT> validSiteRange = new ArrayList<>();
 
 		PlacementT site0 = getCurrentPlacement(selected);
 		PlacementT site1 = null;
@@ -802,11 +833,42 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 			}
 		}*/
 		//TODO maybe include this loop in the lower one? what do we gain by precomputing this?
-		for(PlacementT s : validSites){
-			if (isInRange(site0, s)) {
-				validSiteRange.add(s);
+
+
+
+
+		List<PlacementT> validSiteRange;
+
+		//if (rangeLimit < 15000) {
+		if (true) {
+			validSiteRange = possiblePlacements.get(hm0.getModule()).getByRangeAround((int) rangeLimit, getPlacementTile(site0));
+
+			/*
+			ArrayList<PlacementT> validSiteRangeLegacy = new ArrayList<>();
+			for(PlacementT s : validSites){
+				if (isInRange(site0, s)) {
+					validSiteRangeLegacy.add(s);
+				}
+			}
+			Set<PlacementT> setOld = new HashSet<>(validSiteRangeLegacy);
+			Set<PlacementT> setNew = new HashSet<>(validSiteRange2);
+			if (!setOld.equals(setNew)) {
+
+				Path pOld = printPlacements("old", validSiteRange, site0);
+				Path pNew = printPlacements("new",validSiteRange2, site0);
+				throw new RuntimeException("fail in new placement collection when moving "+hmName(hm0)+" from "+site0+" with limit "+rangeLimit+"! See "+pOld+" vs "+pNew);
+			}*/
+
+		} else {
+			Collection<PlacementT> validSites = getAllPlacements(selected);
+			validSiteRange = new ArrayList<>();
+			for(PlacementT s : validSites){
+				if (isInRange(site0, s)) {
+					validSiteRange.add(s);
+				}
 			}
 		}
+
 
 		// Updated code. Store initial number of valid Sites
 		int nr_valid_sites = validSiteRange.size();
@@ -860,6 +922,16 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 			if(hm1 != null){
 				site1Previous = getCurrentPlacement(hm1);
 				//System.out.println("swapping with "+hm1.getName()+", which is currently at "+site1Previous);
+
+				//Can we swap?
+				boolean newContains = possiblePlacements.get(hm1.getModule()).contains(site0);
+				/*boolean oldContains = getAllPlacements(hm1).contains(site0);
+				if (oldContains != newContains) {
+					throw new RuntimeException("contains bug");
+				}*/
+				if (!newContains) {
+					continue;
+				}
 				setTempAnchorSite(hm1, site0);
 				setTempAnchorSite(hm0, site1);
 				if((!checkValidPlacement(hm0)) || (!checkValidPlacement(hm1))){
@@ -891,6 +963,23 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 		int costAfter = calcConnectedCost(hm0, hm1, "After Move");
 		currentMove.setDeltaCost(costAfter - costBefore);
 		return true;
+	}
+
+	private Path printPlacements(String name, List<PlacementT> validSiteRange, PlacementT center) {
+		Path outPath = Paths.get("/tmp").resolve("placement_range_"+name+".txt");
+
+		try (PrintWriter pw = new PrintWriter(Files.newBufferedWriter(outPath))) {
+
+			validSiteRange.stream().sorted(
+					Comparator.<PlacementT, Integer>comparing(k -> getPlacementTile(k).getColumn()).thenComparing(k -> getPlacementTile(k).getRow())
+			).forEach(p -> pw.println(p+" "+isInRange(center, p)+" "+getDistance(getPlacementTile(center), getPlacementTile(p))));
+
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+
+		return outPath;
+
 	}
 
 	protected abstract ModuleInstT getHmCurrentlyAtPlacement(PlacementT placement);
@@ -947,5 +1036,13 @@ public abstract class BlockPlacer2<ModuleInstT extends AbstractModuleInst<?>, Pl
 			}
 		}
 		return alpha * totalWireLength;
+	}
+
+	protected static int getDistance(Tile a, Tile b) {
+		TileRectangle rect = new SimpleTileRectangle();
+		rect.extendTo(a);
+		rect.extendTo(b);
+		final int largerDimension = rect.getLargerDimension();
+		return largerDimension;
 	}
 }

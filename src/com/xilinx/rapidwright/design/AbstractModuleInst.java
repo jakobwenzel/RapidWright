@@ -8,7 +8,7 @@ import com.xilinx.rapidwright.edif.EDIFPort;
 /**
  * Instance of some sort of Module
  */
-public class AbstractModuleInst<T extends AbstractModuleInst<T>> {
+public abstract class AbstractModuleInst<ModuleT, T extends AbstractModuleInst<ModuleT, T>> {
 
     /** Name of the module instance */
     private String name;
@@ -23,6 +23,8 @@ public class AbstractModuleInst<T extends AbstractModuleInst<T>> {
     public AbstractModuleInst(String name) {
         this.name = name;
     }
+
+    public abstract ModuleT getModule();
 
     /**
      * @return the name of this module instance
@@ -69,7 +71,7 @@ public class AbstractModuleInst<T extends AbstractModuleInst<T>> {
             return false;
         if(getClass() != obj.getClass())
             return false;
-        AbstractModuleInst<?> other = (AbstractModuleInst<?>) obj;
+        AbstractModuleInst<?,?> other = (AbstractModuleInst<?,?>) obj;
         if(name == null){
             if(other.name != null)
                 return false;

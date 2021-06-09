@@ -16,23 +16,22 @@ import com.xilinx.rapidwright.design.ModuleInst;
 import com.xilinx.rapidwright.design.Net;
 import com.xilinx.rapidwright.design.SiteInst;
 import com.xilinx.rapidwright.design.SitePinInst;
-import com.xilinx.rapidwright.design.TileRectangle;
 import com.xilinx.rapidwright.device.PIP;
 import com.xilinx.rapidwright.device.Site;
 import com.xilinx.rapidwright.device.Tile;
 import com.xilinx.rapidwright.util.MessageGenerator;
 import com.xilinx.rapidwright.util.Utils;
 
-public class BlockPlacer2Module extends BlockPlacer2<HardMacro, Site, Path>{
+public class BlockPlacer2Module extends BlockPlacer2<Module, HardMacro, Site, Path>{
     /** The current location of all hard macros */
     private HashMap<Site, HardMacro> currentPlacements;
     private Map<ModuleInst, HardMacro> macroMap;
 
-    public BlockPlacer2Module(Design design, java.nio.file.Path graphData) {
-        super(design, graphData);
+    public BlockPlacer2Module(Design design, boolean ignoreMostUsedNets, java.nio.file.Path graphData) {
+        super(design, ignoreMostUsedNets, graphData);
     }
     public BlockPlacer2Module(Design design) {
-        super(design, null);
+        super(design, true, null);
     }
 
     @Override
@@ -51,7 +50,7 @@ public class BlockPlacer2Module extends BlockPlacer2<HardMacro, Site, Path>{
                     // Need to check if placements will work with existing implementation
                     ArrayList<Site> openSites = new ArrayList<Site>();
                     for(Site s : sites){
-                        if(module.isValidPlacement(s, dev, design)){
+                        if(module.isValidPlacement(s, design)){
                             openSites.add(s);
                         }
                     }
@@ -91,6 +90,11 @@ public class BlockPlacer2Module extends BlockPlacer2<HardMacro, Site, Path>{
     }
 
     @Override
+    protected void checkForOverlaps() {
+
+    }
+
+    @Override
     void placeHm(HardMacro hm, Site site) {
         if(!hm.place(site)){
             throw new RuntimeException("ERROR: Failed to place " + hm.getName() + " at " + site);
@@ -124,10 +128,12 @@ public class BlockPlacer2Module extends BlockPlacer2<HardMacro, Site, Path>{
 
     @Override
     protected boolean isInRange(Site current, Site newPlacement) {
-        //TODO caching?
-        TileRectangle rect = TileRectangle.fromSingleTile(current.getTile()).expand((int) rangeLimit);
-        return rect.isInside(newPlacement.getTile());
+        return getDistance(current.getTile(), newPlacement.getTile()) <= rangeLimit;
+    }
 
+    @Override
+    protected Tile getPlacementTile(Site placement) {
+        return placement.getTile();
     }
 
     @Override

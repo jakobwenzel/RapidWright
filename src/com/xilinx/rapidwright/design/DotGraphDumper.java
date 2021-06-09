@@ -26,7 +26,7 @@ public abstract class DotGraphDumper<InstanceT, PortT, PortTemplateT, NetT, Desi
     protected abstract String getPortTemplateName(PortTemplateT port);
     protected abstract Stream<PortT> getRootPorts(DesignT design);
     protected abstract String getNetName(NetT net);
-    protected abstract Map<?, ?> getInstanceProperties(InstanceT instance);
+    protected abstract Map<?, ?> getInstanceProperties(InstanceT instance, DesignT design);
 
     private String escapeText(String s) {
         return s.replaceAll("([\\\\\"<>])", "\\\\$1");
@@ -48,12 +48,12 @@ public abstract class DotGraphDumper<InstanceT, PortT, PortTemplateT, NetT, Desi
         return "<tr><td><table cellspacing=\"0\" cellpadding=\"0\" border=\"0\"><tr>\n"+res+"\n</tr></table></td></tr>";
     }
 
+    private String replaceChars(String name) {
+        return name.replaceAll("[^0-9a-zA-Z_]","");
+    }
     private Map<PortT, String> dumpInstance(PrintWriter ps, java.util.PrimitiveIterator.OfInt ids, InstanceT inst, DesignT design) {
-        String id = "inst"+ ids.next();
+        String id = "inst_" +replaceChars(getInstanceName(inst))+"_"+ ids.next();
 
-        if (getInstanceName(inst).startsWith("out")) {
-            System.out.println("out!");
-        }
 
         Map<Boolean, List<PortT>> partitioned = getPorts(inst, design)
                 .sorted(Comparator.comparing(this::getPortName))
@@ -83,7 +83,7 @@ public abstract class DotGraphDumper<InstanceT, PortT, PortTemplateT, NetT, Desi
                 "<tr><td border=\"1\"><b>"+escapeHtml(getInstanceName(inst))+"</b></td></tr>"
         );
         Stream<String> props;
-        Map<?,?> propMap = getInstanceProperties(inst);
+        Map<?,?> propMap = getInstanceProperties(inst, design);
         if (propMap == null) {
             props = Stream.empty();
         } else {

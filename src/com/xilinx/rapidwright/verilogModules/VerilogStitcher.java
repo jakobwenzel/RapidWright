@@ -15,10 +15,11 @@ import java.util.stream.Collectors;
 
 import com.xilinx.rapidwright.design.Cell;
 import com.xilinx.rapidwright.design.Design;
-import com.xilinx.rapidwright.design.ModuleInst;
+import com.xilinx.rapidwright.design.ModuleImplsInstance;
 import com.xilinx.rapidwright.design.NetType;
 import com.xilinx.rapidwright.design.SiteInst;
 import com.xilinx.rapidwright.design.SitePinInst;
+import com.xilinx.rapidwright.design.Unisim;
 import com.xilinx.rapidwright.design.blocks.ImplGuide;
 import com.xilinx.rapidwright.device.Device;
 import com.xilinx.rapidwright.device.SiteTypeEnum;
@@ -32,6 +33,7 @@ import com.xilinx.rapidwright.edif.EDIFNetlist;
 import com.xilinx.rapidwright.edif.EDIFPortInst;
 import com.xilinx.rapidwright.edif.EDIFPropertyValue;
 import com.xilinx.rapidwright.edif.EDIFTools;
+import com.xilinx.rapidwright.examples.SLRCrosserGenerator;
 import com.xilinx.rapidwright.ipi.AbstractBlockStitcher;
 import com.xilinx.rapidwright.ipi.BlockCreator;
 import com.xilinx.rapidwright.ipi.ClockConstraint;
@@ -46,7 +48,7 @@ import joptsimple.OptionSpec;
 
 public class VerilogStitcher extends AbstractBlockStitcher {
 
-    protected VerilogStitcher(Path cacheDir, Path edifFile,  String partName) {
+    public VerilogStitcher(Path cacheDir, Path edifFile, String partName) {
         super(cacheDir, edifFile);
         this.partName = partName;
     }
@@ -143,6 +145,7 @@ public class VerilogStitcher extends AbstractBlockStitcher {
         renameLibraries(edifNetlist);
         moveBlackboxes(edifNetlist);
         makeUndrivenNetsStatic(edifNetlist);
+
         return edifNetlist;
     }
 
@@ -275,16 +278,45 @@ public class VerilogStitcher extends AbstractBlockStitcher {
     }
 
     @Override
-    public List<SiteInst> stitchDesign(Design design, Map<String, PackagePinConstraint> constraints) {
-        //Our cache entries may have renamed ports. we change the edif netlist to match the physical loaded ports
-        for (ModuleInst moduleInst : design.getModuleInsts()) {
-            EDIFCell moduleCell = moduleInst.getModule().getNetlist().getTopCell();
-            EDIFHierCellInst designInst = design.getNetlist().getHierCellInstFromName(moduleInst.getName());
-            System.out.println(moduleCell.getPorts());
-            System.out.println(designInst.getInst().getPortInsts());
-            System.out.println();
-        }
-        return super.stitchDesign(design, constraints);
+    public List<SiteInst> stitchDesign(Design design, Map<String, PackagePinConstraint> constraints, Map<String, ModuleImplsInstance> moduleInsts) {
+        addClkBuffer(design);
+        return super.stitchDesign(design, constraints, moduleInsts);
+    }
+
+    private void addClkBuffer(Design design) {
+        design.getTopEDIFCell().getPorts().stream().filter(p->p.getName().contains("clk") && p.isInput())
+                .forEach(clkport -> {
+                    System.out.println("adding clock buffer for "+clkport);
+
+                    EDIFNetlist n = design.getNetlist();
+                    EDIFCell parent = n.getTopCell();
+
+                    // Create BUFGCE in netlist and connect it
+                    EDIFCellInst bufgce = Design.createUnisimInst(parent, clkport.getName()+"_buf", Unisim.BUFGCE);
+                    EDIFNet clkInNet = parent.getNet(clkport.getName()); //TODO don't just assume the net has the same name
+
+                    EDIFNet clkBufNet = parent.createNet(clkport.getName()+"_buf");
+
+
+                    for (Iterator<EDIFPortInst> iter = clkInNet.getPortInsts().iterator(); iter.hasNext();) {
+                        final EDIFPortInst portInst = iter.next();
+                        if (portInst.getCellInst() != null) {
+                            iter.remove();
+                            clkBufNet.addPortInst(portInst);
+                        }
+                    }
+
+                    clkInNet.createPortInst("I", bufgce);
+
+                    clkBufNet.createPortInst("O", bufgce);
+                    EDIFNet vccNet = EDIFTools.getStaticNet(NetType.VCC, parent, n);
+                    vccNet.createPortInst("CE", bufgce);
+                    SLRCrosserGenerator.placeBUFGCE(design, design.getDevice().getSite("BUFGCE_X0Y8"), bufgce.getName());
+                });
+
+
+        //netlist.getTopCell().getNet("ap_clk").getPortInsts().removeIf(edifPortInst -> edifPortInst.getCellInst() == null);
+        //netlist.getTopCell().getPortMap().remove("ap_clk");
     }
 
     public static void main(String[] args) throws FileNotFoundException {

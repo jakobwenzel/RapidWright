@@ -4,7 +4,7 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 import com.xilinx.rapidwright.design.ModuleImplsInstance;
-import com.xilinx.rapidwright.design.TileRectangle;
+import com.xilinx.rapidwright.design.SimpleTileRectangle;
 import com.xilinx.rapidwright.device.Tile;
 
 public class ImplsPath extends AbstractPath<ImplsInstancePort, ModuleImplsInstance>{
@@ -37,19 +37,22 @@ public class ImplsPath extends AbstractPath<ImplsInstancePort, ModuleImplsInstan
 
     public void calculateLength(){
 
-        TileRectangle.MutableRectangle rect = new TileRectangle.MutableRectangle();
+        SimpleTileRectangle rect = new SimpleTileRectangle();
         for (ImplsInstancePort port : ports) {
             port.enterToRect(rect);
         }
 
-        TileRectangle immutableRect = rect.toImmutable().orElseThrow(IllegalStateException::new);
+        if (rect.isEmpty()) {
+            length = 0;
+            return;
+        }
 
         int fanOutPenalty = 1;
         if (getSize() > 30){
             fanOutPenalty = 3;
         }
 
-        length = immutableRect.hpwl() * fanOutPenalty;
+        length = rect.hpwl() * fanOutPenalty;
 
 
         /*Optional<TileRectangle> collect = ports.stream()
@@ -67,7 +70,6 @@ public class ImplsPath extends AbstractPath<ImplsInstancePort, ModuleImplsInstan
         if (legacyCalc != length) {
             throw new RuntimeException("Methods differ, "+newHpwl+" vs "+length+" at "+name);
         }*/
-        //TODO fanout penalty?
     }
 
     public String getName() {
