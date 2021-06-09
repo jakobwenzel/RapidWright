@@ -75,7 +75,7 @@ public class DotPhysicalDumper extends DotGraphDumper<Cell, SitePinInst, Void, N
     }
 
     @Override
-    protected Map<?, ?> getInstanceProperties(Cell cell) {
+    protected Map<?, ?> getInstanceProperties(Cell cell, Design design) {
         return cell.getProperties();
     }
 

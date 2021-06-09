@@ -14,8 +14,8 @@ import com.xilinx.rapidwright.design.ModulePlacement;
 public class BlockPlacer2ImplsDebug extends BlockPlacer2Impls{
         private final int maxTileColumn;
 
-        public BlockPlacer2ImplsDebug(Design design, java.nio.file.Path graphData, List<ModuleImplsInstance> instances, int maxTileColumn) {
-            super(design, graphData, instances);
+        public BlockPlacer2ImplsDebug(Design design, List<ModuleImplsInstance> instances, java.nio.file.Path graphData, boolean ignoreMostUsedNets, int maxTileColumn) {
+            super(design, instances, ignoreMostUsedNets, graphData);
             this.maxTileColumn = maxTileColumn;
         }
 

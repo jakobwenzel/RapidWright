@@ -80,7 +80,7 @@ public class DotEdifDumper extends DotGraphDumper<EDIFCellInst, EDIFPortInst, ED
     }
 
     @Override
-    protected Map<?, ?> getInstanceProperties(EDIFCellInst edifCellInst) {
+    protected Map<?, ?> getInstanceProperties(EDIFCellInst edifCellInst, EDIFNetlist design) {
         return edifCellInst.getProperties();
     }
 

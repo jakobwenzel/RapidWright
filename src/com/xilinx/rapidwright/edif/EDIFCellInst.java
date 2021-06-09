@@ -193,12 +193,18 @@ public class EDIFCellInst extends EDIFPropertyObject implements EDIFEnumerable {
     }
     
     public void updateCellType(EDIFCell cellType) {
+        final EDIFCell origCellType = cellType;
         setCellType(cellType);
         for(EDIFPortInst portInst : getPortInsts()) {
             EDIFPort origPort = portInst.getPort();
             EDIFPort port = cellType.getPort(origPort.getBusName());
             if(port == null || port.getWidth() != origPort.getWidth()) {
                 port = cellType.getPort(origPort.getName());
+                if (port == null) {
+                    cellType.getPorts().stream().map(p->p.getName()).sorted().forEach(p-> System.out.println("available port: "+p));
+                    cellType.getPortMap().keySet().stream().sorted().forEach(p-> System.out.println("available port name: "+p));
+                    throw new RuntimeException("did not find port "+origPort.getName()+" on "+cellType+". was: "+origCellType+", in inst "+getName());
+                }
             }
             portInst.setPort(port);
         }

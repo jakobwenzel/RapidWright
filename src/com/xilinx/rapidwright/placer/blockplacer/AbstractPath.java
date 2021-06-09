@@ -10,7 +10,7 @@ import java.util.stream.Stream;
 import com.xilinx.rapidwright.design.AbstractModuleInst;
 import com.xilinx.rapidwright.device.Tile;
 
-public abstract class AbstractPath<PortT, ModuleInstT extends AbstractModuleInst<?>> implements Iterable<PortT> {
+public abstract class AbstractPath<PortT, ModuleInstT extends AbstractModuleInst<?,?>> implements Iterable<PortT> {
 
     protected List<PortT> ports = new ArrayList<>();
     protected Set<ModuleInstT> moduleInsts = new HashSet<>();

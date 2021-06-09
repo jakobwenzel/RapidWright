@@ -1,0 +1,252 @@
+package com.xilinx.rapidwright.design;
+
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collector;
+
+import com.xilinx.rapidwright.device.Site;
+import com.xilinx.rapidwright.device.Tile;
+
+/**
+ * A {@link TileRectangle} that is relocatable.
+ * <p>
+ * As padding tiles may be inserted when relocating Rectangles, we do not store coordinates of tiles but rather the
+ * tiles themselves. For every border (top/bottom/left/right) we save one example tile. When Relocation is not needed,
+ * use {@link SimpleTileRectangle} instead
+ */
+public class RelocatableTileRectangle extends TileRectangle {
+
+    private Tile minColumn;
+    private Tile maxColumn;
+    private Tile minRow;
+    private Tile maxRow;
+    private boolean empty = true;
+
+
+    private RelocatableTileRectangle(Tile tile) {
+        this.minColumn = tile;
+        this.maxColumn = tile;
+        this.minRow = tile;
+        this.maxRow = tile;
+        empty = false;
+    }
+
+    public RelocatableTileRectangle(Tile minColumn, Tile maxColumn, Tile minRow, Tile maxRow) {
+        this.minColumn = Objects.requireNonNull(minColumn);
+        this.maxColumn = Objects.requireNonNull(maxColumn);
+        this.minRow = Objects.requireNonNull(minRow);
+        this.maxRow = Objects.requireNonNull(maxRow);
+        empty = false;
+    }
+
+    public RelocatableTileRectangle() {
+    }
+
+    /**
+     * Create a TileRectangle from a single TIle
+     *
+     * @param tile Tile to make into TileRectangle
+     * @return a TileRectangle representing the tile
+     */
+    public static RelocatableTileRectangle fromSingleTile(Tile tile) {
+        return new RelocatableTileRectangle(tile);
+    }
+
+    /**
+     * Collect a Stream&lt;Tile&gt; to a TileRectangle
+     *
+     * @return A Collector
+     */
+    public static Collector<Tile, ?, RelocatableTileRectangle> collector() {
+        return Collector.of(
+                RelocatableTileRectangle::new,
+                RelocatableTileRectangle::extendTo,
+                (a, b) -> {
+                    a.extendTo(b);
+                    return a;
+                },
+                Function.identity(),
+                Collector.Characteristics.UNORDERED,
+                Collector.Characteristics.IDENTITY_FINISH
+        );
+    }
+
+    @Override
+    public String toString() {
+        return "RelocatableTileRectangle{" +
+                "minColumn=" + minColumn +
+                ", maxColumn=" + maxColumn +
+                ", minRow=" + minRow +
+                ", maxRow=" + maxRow +
+                '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        RelocatableTileRectangle that = (RelocatableTileRectangle) o;
+        return minColumn.getColumn() == that.minColumn.getColumn()
+                && maxColumn.getColumn() == that.maxColumn.getColumn()
+                && minRow.getRow() == that.minRow.getRow()
+                && maxRow.getRow() == that.maxRow.getRow();
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(minColumn.getColumn(), maxColumn.getColumn(), minRow.getRow(), maxRow.getRow());
+    }
+
+    private Tile[][] minColumnArr;
+    private Tile[][] maxColumnArr;
+    private Tile[][] minRowArr;
+    private Tile[][] maxRowArr;
+
+
+    //private Map<Tile, Map<Tile, RelocatableTileRectangle>> correspondings = new HashMap<>();
+    public RelocatableTileRectangle getCorresponding(Tile newAnchor, Tile originalAnchor) {
+       // return correspondings.computeIfAbsent(originalAnchor, x->new HashMap<>())
+        //        .computeIfAbsent(newAnchor, x -> {
+        if (minColumnArr == null) {
+            minColumnArr = newAnchor.getDevice().getTilesByNameRoot(minColumn.getNameRoot());
+            maxColumnArr = newAnchor.getDevice().getTilesByNameRoot(minColumn.getNameRoot());
+            minRowArr = newAnchor.getDevice().getTilesByNameRoot(minColumn.getNameRoot());
+            maxRowArr = newAnchor.getDevice().getTilesByNameRoot(minColumn.getNameRoot());
+        }
+        return new RelocatableTileRectangle(
+                Module.getCorrespondingTile(minColumn, newAnchor, originalAnchor, minColumnArr),
+                Module.getCorrespondingTile(maxColumn, newAnchor, originalAnchor, maxColumnArr),
+                Module.getCorrespondingTile(minRow, newAnchor, originalAnchor, minRowArr),
+                Module.getCorrespondingTile(maxRow, newAnchor, originalAnchor, maxRowArr)
+        );
+   //             });
+    }
+
+
+    private void extendToRect(Tile otherMinX, Tile otherMaxX, Tile otherMinY, Tile otherMaxY) {
+        minColumnArr = null;
+        maxColumnArr = null;
+        minRowArr = null;
+        maxRowArr = null;
+        if (empty) {
+            minColumn = otherMinX;
+            maxColumn = otherMaxX;
+            minRow = otherMinY;
+            maxRow = otherMaxY;
+            empty = false;
+            return;
+        }
+
+        if (otherMinX.getColumn() < minColumn.getColumn()) {
+            minColumn = otherMinX;
+        }
+        if (otherMaxX.getColumn() > maxColumn.getColumn()) {
+            maxColumn = otherMaxX;
+        }
+        if (otherMinY.getRow() < minRow.getRow()) {
+            minRow = otherMinY;
+        }
+        if (otherMaxY.getRow() > maxRow.getRow()) {
+            maxRow = otherMaxY;
+        }
+    }
+
+    /**
+     * Extend the Rectangle so that the specified Tile is inside
+     *
+     * @param tile The tile to include
+     */
+    public void extendTo(Tile tile) {
+        extendToRect(tile, tile, tile, tile);
+    }
+
+    /**
+     * Extend the Rectangle so that the specified Rectangle is inside
+     *
+     * @param rect The Rectangle to include
+     */
+    public void extendTo(RelocatableTileRectangle rect) {
+        if (rect.empty) {
+            return;
+        }
+        extendToRect(rect.minColumn, rect.maxColumn, rect.minRow, rect.maxRow);
+    }
+
+
+    /**
+     * Extend the Rectangle so that a shifted tile is inside. The Tile is assumed to be located relative to some anchor.
+     * The anchor is shifted from {@code templateAnchor} to {@code currentAnchor}. This location relative to the new
+     * anchor is then included in the Rectangle.
+     *
+     * @param tile           tile to include after shifting
+     * @param currentAnchor  target anchor
+     * @param templateAnchor source anchor
+     */
+    public void extendToCorresponding(Tile tile, Site currentAnchor, SiteInst templateAnchor) {
+        Tile corresponding = Module.getCorrespondingTile(tile, currentAnchor.getTile(), templateAnchor.getTile());
+        extendToRect(
+                corresponding,
+                corresponding,
+                corresponding,
+                corresponding
+        );
+    }
+
+    /**
+     * Extend the Rectangle so that a shifted rectangle is inside. The Rectangle is assumed to be located relative to some anchor.
+     * The anchor is shifted from {@code templateAnchor} to {@code currentAnchor}. This location relative to the new
+     * anchor is then included in the Rectangle.
+     *
+     * @param rect           Rectangle to include after shifting
+     * @param currentAnchor  target anchor
+     * @param templateAnchor source anchor
+     */
+    public void extendToCorresponding(RelocatableTileRectangle rect, Site currentAnchor, SiteInst templateAnchor) {
+        extendToRect(
+                Objects.requireNonNull(Module.getCorrespondingTile(rect.minColumn, currentAnchor.getTile(), templateAnchor.getTile())),
+                Objects.requireNonNull(Module.getCorrespondingTile(rect.maxColumn, currentAnchor.getTile(), templateAnchor.getTile())),
+                Objects.requireNonNull(Module.getCorrespondingTile(rect.minRow, currentAnchor.getTile(), templateAnchor.getTile())),
+                Objects.requireNonNull(Module.getCorrespondingTile(rect.maxRow, currentAnchor.getTile(), templateAnchor.getTile()))
+        );
+    }
+
+    @Override
+    public int getMinRow() {
+        return minRow.getRow();
+    }
+
+    @Override
+    public int getMaxRow() {
+        return maxRow.getRow();
+    }
+
+    @Override
+    public int getMinColumn() {
+        return minColumn.getColumn();
+    }
+
+    @Override
+    public int getMaxColumn() {
+        return maxColumn.getColumn();
+    }
+
+    public boolean isEmpty() {
+        return empty;
+    }
+
+    public Tile getMinColumnTile() {
+        return minColumn;
+    }
+
+    public Tile getMaxColumnTile() {
+        return maxColumn;
+    }
+
+    public Tile getMinRowTile() {
+        return minRow;
+    }
+
+    public Tile getMaxRowTile() {
+        return maxRow;
+    }
+}

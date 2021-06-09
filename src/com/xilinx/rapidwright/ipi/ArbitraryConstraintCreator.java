@@ -43,6 +43,38 @@ public class ArbitraryConstraintCreator {
         HashMap<String, PackagePinConstraint> result = new HashMap<>();
         Package pkg = device.getPackage(part.getPkg());
 
+        final long count = pkg.getPackagePinMap().values().stream()
+                .filter(ArbitraryConstraintCreator::isPinUsable)
+                .count();
+        System.out.println("device has "+count+" usable pins");
+
+        long total = 0;
+        long generalPurpose = 0;
+        long hp = 0;
+        long supply = 0;
+
+        for (PackagePin pin : pkg.getPackagePinMap().values()) {
+
+            total++;
+            if (pin.isGeneralPurpose()) {
+                generalPurpose++;
+            }
+
+            if (pin.getPinFunction().equals("GN") || pin.getPinFunction().startsWith("VCC")) {
+                supply++;
+            } else if (pin.getIOBank() == null) {
+                System.out.println("no IO Bank for "+pin+", "+pin.getPinFunction()+", "+pin.isGeneralPurpose()+", "+pin.isLowCap());
+            } else {
+                IOBank bank = Objects.requireNonNull(pin.getIOBank());
+                if (bank.getBankType() == IOBankType.BT_HIGH_PERFORMANCE) {
+                    hp++;
+                }
+            }
+        }
+        System.out.println("total = " + total);
+        System.out.println("generalPurpose = " + generalPurpose);
+        System.out.println("hp = " + hp);
+        System.out.println("supply = " + supply);
 
         Iterator<PackagePin> pins = pkg.getPackagePinMap().values().stream()
                 .filter(ArbitraryConstraintCreator::isPinUsable)
