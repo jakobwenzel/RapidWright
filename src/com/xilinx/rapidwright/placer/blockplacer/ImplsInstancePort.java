@@ -5,6 +5,7 @@ import java.util.stream.Stream;
 
 import com.xilinx.rapidwright.design.ModuleImplsInstance;
 import com.xilinx.rapidwright.design.Port;
+import com.xilinx.rapidwright.design.SimpleTileRectangle;
 import com.xilinx.rapidwright.design.SitePinInst;
 import com.xilinx.rapidwright.design.TileRectangle;
 import com.xilinx.rapidwright.device.Tile;
@@ -16,7 +17,7 @@ public abstract class ImplsInstancePort {
 
     public abstract boolean isOutputPort();
 
-    public abstract void enterToRect(TileRectangle.MutableRectangle rect);
+    public abstract void enterToRect(SimpleTileRectangle rect);
 
     public static class SPI extends ImplsInstancePort {
         private final SitePinInst sitePinInst;
@@ -41,7 +42,7 @@ public abstract class ImplsInstancePort {
         }
 
         @Override
-        public void enterToRect(TileRectangle.MutableRectangle rect) {
+        public void enterToRect(SimpleTileRectangle rect) {
             rect.extendTo(sitePinInst.getTile());
         }
 
@@ -52,10 +53,17 @@ public abstract class ImplsInstancePort {
     public static class InstPort extends ImplsInstancePort {
         private final ModuleImplsInstance instance;
         private final String port;
+        private boolean boundingBoxCalculated;
+        private TileRectangle boundingBox;
 
         public InstPort(ModuleImplsInstance instance, String port) {
             this.instance = instance;
             this.port = port;
+        }
+
+        public void resetBoundingBox() {
+            boundingBoxCalculated = false;
+            boundingBox = null;
         }
 
         @Override
@@ -69,7 +77,7 @@ public abstract class ImplsInstancePort {
             }
 
             return portImpl.getSitePinInsts().stream()
-                    .map(spi -> instance.getCurrentModuleImplementation().getCorrespondingTile(spi.getTile(), instance.getPlacement().placement.getTile(), instance.getModule().getDevice()));
+                    .map(spi -> instance.getCurrentModuleImplementation().getCorrespondingTile(spi.getTile(), instance.getPlacement().placement.getTile()));
         }
 
         @Override
@@ -83,24 +91,35 @@ public abstract class ImplsInstancePort {
         }
 
         @Override
-        public void enterToRect(TileRectangle.MutableRectangle rect) {
-            if (instance.getPlacement() == null) {
-                return;
+        public void enterToRect(SimpleTileRectangle rect) {
+            if (!boundingBoxCalculated) {
+                boundingBoxCalculated = true;
+                if (instance.getPlacement() == null) {
+                    return;
+                }
+                Port portImpl = instance.getCurrentModuleImplementation().getPort(this.port);
+                if (portImpl == null) {
+                    throw new IllegalStateException("In "+instance.getName()+" of type "+instance.getModule().getName()+", currently mapped to impl"+instance.getCurrentModuleImplementation()+", did not find abstract port "+this.port);
+                }
+                if (!portImpl.getSitePinInsts().isEmpty()) {
+                    boundingBox = portImpl.getBoundingBox().getCorresponding(instance.getPlacement().placement.getTile(), instance.getCurrentModuleImplementation().getAnchor().getTile());
+                }
             }
-            Port portImpl = instance.getCurrentModuleImplementation().getPort(this.port);
-            TileRectangle boundingBox = portImpl.getBoundingBox();
-            /*for (SitePinInst sitePinInst : portImpl.getSitePinInsts()) {
-                rect.extendToCorresponding(
-                        sitePinInst.getTile(),
-                        instance.getPlacement().placement,
-                        instance.getCurrentModuleImplementation().getAnchor()
-                );
+            if (boundingBox != null) {
+                rect.extendTo(boundingBox);
+            }
+            /*if (!portImpl.getSitePinInsts().isEmpty()) {
+                if (boundingBox == null) {
+                                        boundingBox = portImpl.getBoundingBox().getCorresponding(instance.getPlacement().placement.getTile(), instance.getCurrentModuleImplementation().getAnchor().getTile());
+                }
 
-                //Tile tile = instance.getCurrentModuleImplementation().getCorrespondingTile(sitePinInst.getTile(), instance.getPlacement().placement.getTile(), instance.getModule().getDevice());
-                //rect.extendTo(tile);
+                rect.extendTo(boundingBox);
+
+
+                //Uncached
+                //TileRectangle portBB = portImpl.getBoundingBox();
+                //rect.extendToCorresponding(boundingBox, instance.getPlacement().placement, instance.getCurrentModuleImplementation().getAnchor());
             }*/
-            rect.extendToCorresponding(boundingBox, instance.getPlacement().placement, instance.getCurrentModuleImplementation().getAnchor());
-
         }
 
         public ModuleImplsInstance getInstance() {

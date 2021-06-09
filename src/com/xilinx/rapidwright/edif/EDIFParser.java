@@ -446,7 +446,15 @@ public class EDIFParser implements AutoCloseable{
 						EDIFCellInst inst = portInst.getCellInst();
 						EDIFCell c = inst == null ? portInst.getParentCell() : inst.getCellType();
 						String uid = getUniqueEDIFPortID(c.getLibrary(), c, portInst.getName());
-						portInst.setPort(portLookup.get(uid));
+						final EDIFPort port = portLookup.get(uid);
+						if (port == null) {
+							if (inst != null) {
+								throw new IllegalStateException("In Cell " + cell.getName() + ", cellnst " + inst.getName() + " does not have port " + portInst.getName());
+							} else {
+								throw new IllegalStateException("In Cell "+cell.getName()+", tried to refer to nonexisting cell port "+portInst.getName());
+							}
+						}
+						portInst.setPort(port);
 						if(inst == null){
 							cell.addInternalPortMapEntry(portInst.getPortInstNameFromPort(), net);							
 						}else {

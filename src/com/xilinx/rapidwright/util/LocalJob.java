@@ -50,6 +50,7 @@ public class LocalJob extends Job {
 		
 		try {
 			ProcessBuilder pb = new ProcessBuilder();
+			pb.environment().put("RAPIDWRIGHT_PATH", FileTools.getRapidWrightPath());
 			pb.redirectErrorStream(true);
 			pb.redirectOutput(new File(launchScriptNames.getSecond()));
 			pb.command(launchScriptNames.getFirst());

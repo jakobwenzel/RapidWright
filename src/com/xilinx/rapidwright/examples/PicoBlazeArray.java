@@ -76,7 +76,7 @@ public class PicoBlazeArray {
 		}
 	}
 
-	static abstract class PicoBlazeArrayCreator<T extends AbstractModuleInst<T>> {
+	public static abstract class PicoBlazeArrayCreator<T extends AbstractModuleInst<?,T>> {
 		private int maxTileColumn;
 
 		public List<T> getInstances() {
@@ -95,6 +95,7 @@ public class PicoBlazeArray {
 		protected abstract T createInstance(Design design, String name, Module impl, ModuleImpls impls);
 		public Design createDesign(File srcDir, String deviceName, CodePerfTracker t) {
 
+			t.start("Creating design");
 			// Create a new design with references to device and netlist
 			Design design = new Design("top", deviceName);
 			Device device = design.getDevice();
@@ -151,7 +152,7 @@ public class PicoBlazeArray {
 					Site bram = device.getSite("RAMB36_X" + x + "Y" + y);
 					Module impl = null;
 					for(Module m : picoBlazeImpls){
-						if(m.isValidPlacement(bram, device, design)){
+						if(m.isValidPlacement(bram, design)){
 							impl = m;
 							break;
 						}
@@ -218,9 +219,9 @@ public class PicoBlazeArray {
 		}
 
 		protected abstract void placeInArray(T mi, Site bram, Module impl);
-		protected abstract BlockPlacer2<?, ?, ?> createPlacer(Design design);
+		protected abstract BlockPlacer2<?, ?, ?, ?> createPlacer(Design design);
 
-		public abstract void lowerToModules(Design design);
+		public abstract void lowerToModules(Design design, CodePerfTracker t);
 	}
 
 	/**
@@ -228,6 +229,7 @@ public class PicoBlazeArray {
 	 * @param args
 	 */
 	public static void main(String[] args) {
+		MessageGenerator.waitOnAnyKey();
 		OptionParser optionParser = new OptionParser();
 		ArgumentAcceptingOptionSpec<String> dirOption = optionParser.accepts("dir", "Module Impls input dir").withRequiredArg().required();
 		ArgumentAcceptingOptionSpec<String> partOption = optionParser.accepts("part", "Part to use").withRequiredArg().required();
@@ -257,61 +259,18 @@ public class PicoBlazeArray {
 		Path outName = Paths.get(options.valueOf(outOption));
 		boolean noHandPlacer = options.has(handPlacerOption);
 		boolean useImpls = options.has(implsOption);
-		CodePerfTracker t = new CodePerfTracker("PicoBlaze Array", true).start("Creating design");
+		CodePerfTracker t = new CodePerfTracker("PicoBlaze Array", true);
+		t.useGCToTrackMemory(true);
 
 
 		PicoBlazeArrayCreator<?> creator;
 
 		Path graphDataFile = FileTools.replaceExtension(outName, "_graph.tsv");
 		if (useImpls) {
-			creator = new PicoBlazeArrayCreator<ModuleImplsInstance>() {
-
-				private BlockPlacer2Impls placer;
-
-				@Override
-				protected ModuleImplsInstance createInstance(Design design, String name, Module impl, ModuleImpls impls) {
-					return DesignTools.createModuleImplsInstance(design, name, impls);
-				}
-
-				@Override
-				protected void placeInArray(ModuleImplsInstance mi, Site bram, Module impl) {
-					mi.place(new ModulePlacement(impl.getImplementationIndex(), bram));
-				}
-
-				@Override
-				protected BlockPlacer2<ModuleImplsInstance, ?, ?> createPlacer(Design design) {
-					placer = new BlockPlacer2Impls(design, graphDataFile, getInstances()/*, getMaxTileColumn()*/);
-					return placer;
-				}
-
-				@Override
-				public void lowerToModules(Design design) {
-					DesignTools.createModuleInstsFromModuleImplsInsts(design, getInstances(), placer.getPaths());
-				}
-			};
+			creator = makeImplsCreator(graphDataFile);
 		} else {
 
-			creator = new PicoBlazeArrayCreator<ModuleInst>() {
-				@Override
-				protected ModuleInst createInstance(Design design, String name, Module impl, ModuleImpls impls) {
-					return design.createModuleInst(name, impl);
-				}
-
-				@Override
-				protected void placeInArray(ModuleInst mi, Site bram, Module impl) {
-					mi.place(bram);
-				}
-
-				@Override
-				protected BlockPlacer2<?, ?, ?> createPlacer(Design design) {
-					return new BlockPlacer2Module(design, graphDataFile/*, getMaxTileColumn()*/);
-				}
-
-				@Override
-				public void lowerToModules(Design design) {
-					//Nothing to do
-				}
-			};
+			creator = makeModuleCreator(graphDataFile);
 		}
 
 		Design design = creator.createDesign(srcDir, part, t);
@@ -321,13 +280,13 @@ public class PicoBlazeArray {
 		//DotPhysicalDumper.dump(srcDir.toPath().resolve("physical.dot"), design);
 
 
-		System.out.println("wait for return key press...");
-		MessageGenerator.waitOnAnyKey();
+		//System.out.println("wait for return key press...");
+		//MessageGenerator.waitOnAnyKey();
 
 		t.stop().start("BlockPlacer");
 		creator.createPlacer(design).placeDesign(true);
 
-		creator.lowerToModules(design);
+		creator.lowerToModules(design, t);
 
 		if (!noHandPlacer) {
 			t.stop().start("Hand Placer");
@@ -339,9 +298,62 @@ public class PicoBlazeArray {
 		t.stop().start("Write DCP");
 
 		design.setAutoIOBuffers(false);
-		design.addXDCConstraint("create_clock -name " + CLK + " -period 2.850 [get_nets " + CLK + "]");
+		//design.addXDCConstraint("create_clock -name " + CLK + " -period 2.850 [get_nets " + CLK + "]");
 		design.writeCheckpoint(outName, CodePerfTracker.SILENT);
 		t.stop().printSummary();
+	}
+
+	public static PicoBlazeArrayCreator<ModuleInst> makeModuleCreator(Path graphDataFile) {
+		return new PicoBlazeArrayCreator<ModuleInst>() {
+			@Override
+			protected ModuleInst createInstance(Design design, String name, Module impl, ModuleImpls impls) {
+				return design.createModuleInst(name, impl);
+			}
+
+			@Override
+			protected void placeInArray(ModuleInst mi, Site bram, Module impl) {
+				mi.place(bram);
+			}
+
+			@Override
+			protected BlockPlacer2<?, ?, ?, ?> createPlacer(Design design) {
+				return new BlockPlacer2Module(design, true, graphDataFile/*, getMaxTileColumn()*/);
+			}
+
+			@Override
+			public void lowerToModules(Design design, CodePerfTracker t) {
+				//Nothing to do
+			}
+		};
+	}
+
+	public static PicoBlazeArrayCreator<ModuleImplsInstance> makeImplsCreator(Path graphDataFile) {
+		return new PicoBlazeArrayCreator<ModuleImplsInstance>() {
+
+			private BlockPlacer2Impls placer;
+
+			@Override
+			protected ModuleImplsInstance createInstance(Design design, String name, Module impl, ModuleImpls impls) {
+				return DesignTools.createModuleImplsInstance(design, name, impls);
+			}
+
+			@Override
+			protected void placeInArray(ModuleImplsInstance mi, Site bram, Module impl) {
+				mi.place(new ModulePlacement(impl.getImplementationIndex(), bram));
+			}
+
+			@Override
+			protected BlockPlacer2<ModuleImpls, ModuleImplsInstance, ?, ?> createPlacer(Design design) {
+				placer = new BlockPlacer2Impls(design, getInstances(), true, graphDataFile /*, getMaxTileColumn()*/);
+				return placer;
+			}
+
+			@Override
+			public void lowerToModules(Design design, CodePerfTracker t) {
+				t.stop().start("Lower to Modules");
+				DesignTools.createModuleInstsFromModuleImplsInsts(design, getInstances(), placer.getPaths());
+			}
+		};
 	}
 
 }

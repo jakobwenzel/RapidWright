@@ -46,7 +46,7 @@ import com.xilinx.rapidwright.util.Utils;
  * 
  * @author Chris Lavin Created on: Jun 22, 2010
  */
-public class ModuleInst extends AbstractModuleInst<ModuleInst>{
+public class ModuleInst extends AbstractModuleInst<Module, ModuleInst>{
 
 	/** The design which contains this module instance */
 	private transient Design design;
@@ -282,7 +282,7 @@ public class ModuleInst extends AbstractModuleInst<ModuleInst>{
 			}
 			
 			Site templateSite = inst.getModuleTemplateInst().getSite();
-			Tile newTile = module.getCorrespondingTile(templateSite.getTile(), newAnchorSite.getTile(), dev);
+			Tile newTile = module.getCorrespondingTile(templateSite.getTile(), newAnchorSite.getTile());
 			Site newSite = templateSite.getCorrespondingSite(inst.getSiteTypeEnum(), newTile);
 
 			if(newSite == null){
@@ -332,7 +332,7 @@ public class ModuleInst extends AbstractModuleInst<ModuleInst>{
 			Net templateNet = net.getModuleTemplateNet();
 			for(PIP pip : templateNet.getPIPs()){
 				Tile templatePipTile = pip.getTile();
-				Tile newPipTile = module.getCorrespondingTile(templatePipTile, newAnchorSite.getTile(), dev);
+				Tile newPipTile = module.getCorrespondingTile(templatePipTile, newAnchorSite.getTile());
 				if(newPipTile == null){
 					if(skipIncompatible) {
 						continue nextnet;
@@ -376,8 +376,23 @@ public class ModuleInst extends AbstractModuleInst<ModuleInst>{
 	 * @return The new tile of the module instance which corresponds to the templateTile, or null
 	 * if none exists.
 	 */
+	public Tile getCorrespondingTile(Tile templateTile, Tile newAnchorTile){
+		return module.getCorrespondingTile(templateTile, newAnchorTile);
+	}
+
+	/**
+	 * This method will calculate and return the corresponding tile of a module instance.
+	 * for a new anchor location.
+	 * @param templateTile The tile in the module which acts as a template.
+	 * @param newAnchorTile This is the tile of the new anchor instance of the module instance.
+	 * @param dev The device which corresponds to this module instance.
+	 * @return The new tile of the module instance which corresponds to the templateTile, or null
+	 * if none exists.
+	 * @deprecated Use {@link ModuleInst#getCorrespondingTile(Tile, Tile)} instead
+	 */
+	@Deprecated
 	public Tile getCorrespondingTile(Tile templateTile, Tile newAnchorTile, Device dev){
-		return module.getCorrespondingTile(templateTile, newAnchorTile, dev);
+		return module.getCorrespondingTile(templateTile, newAnchorTile);
 	}
 
 
@@ -423,6 +438,17 @@ public class ModuleInst extends AbstractModuleInst<ModuleInst>{
 	}
 
 
+	private Port findPassthruInput(Port p) {
+		for (String passthroughName : p.getPassThruPortNames()) {
+			Port ptPort = getModule().getPort(p.getPassThruPortNames().get(0));
+			if (!ptPort.isOutPort()) {
+				return ptPort;
+			}
+		}
+		return null;
+		//throw new IllegalStateException(getName()+"."+p.getName()+" is an passthrough output of "+p.getPassThruPortNames()+". All of them are outputs?!");
+	}
+
 	/**
 	 * Gets (if it exists), the corresponding net within the module instance of the port.
 	 * @param p The port on the module of interest
@@ -436,7 +462,11 @@ public class ModuleInst extends AbstractModuleInst<ModuleInst>{
 		}
 		// Get net of input port pass-thru
 		if(p.isOutPort() && p.getPassThruPortNames().size() > 0){
-			Port input = getModule().getPort(p.getPassThruPortNames().get(0));
+			//TODO Passthrough outputs are bugged when we have multiple GND outputs?
+			Port input = findPassthruInput(p);
+			if (input == null) {
+				return null;
+			}
 			return getCorrespondingNet(input);
 		}
 		return null;
@@ -483,9 +513,9 @@ public class ModuleInst extends AbstractModuleInst<ModuleInst>{
 		
 		// Get original lower left placement 
 		Tile origLowerLeft = getLowerLeftTile(type);
-		
-		String origTilePrefix = origLowerLeft.getTileNamePrefix();
-		String newSuffix = "X" + (origLowerLeft.getTileXCoordinate() + dx) + "Y" + (origLowerLeft.getTileYCoordinate() + dy);
+
+		String origTilePrefix = origLowerLeft.getNameRoot();
+		String newSuffix = "_X" + (origLowerLeft.getTileXCoordinate() + dx) + "Y" + (origLowerLeft.getTileYCoordinate() + dy);
 		
 		Tile newTile = origLowerLeft.getDevice().getTile(origTilePrefix + newSuffix);
 		if(type == null){

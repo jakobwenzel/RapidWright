@@ -2326,20 +2326,22 @@ public class DesignTools {
 		} else if (port instanceof ImplsInstancePort.InstPort) {
 			ImplsInstancePort.InstPort instPort = (ImplsInstancePort.InstPort) port;
 			Port modPort = instPort.getInstance().getCurrentModuleImplementation().getPort(instPort.getPort());
-			if (!modPort.getPassThruPortNames().isEmpty()) {
-				throw new RuntimeException("Passthrough not yet supported");
-			}
 			ModuleInst moduleInst = instanceMap.get(instPort.getInstance());
 			Net net = moduleInst.getCorrespondingNet(modPort);
-			if (net == null) {
-				throw new IllegalStateException("No net on module port "+moduleInst+"."+modPort.getName());
+			if (net == null && !modPort.getSitePinInsts().isEmpty()) {
+				throw new IllegalStateException("No net on module port "+moduleInst+"."+modPort.getName()+" but we have pins");
 			}
+
+			if (!modPort.getPassThruPortNames().isEmpty() && port.isOutputPort()) {
+				System.err.println("Passthrough not yet supported: "+instPort.getInstance().getName()+"."+instPort.getName()+" passes through "+modPort.getPassThruPortNames());
+			}
+
 			return net;
 		} else {
 			throw new IllegalStateException("unknown subtype!");
 		}
 	}
-	public static void createModuleInstsFromModuleImplsInsts(Design design, List<ModuleImplsInstance> instances, Collection<ImplsPath> paths) {
+	public static void createModuleInstsFromModuleImplsInsts(Design design, Collection<ModuleImplsInstance> instances, Collection<ImplsPath> paths) {
 		Map<ModuleImplsInstance, ModuleInst> instanceMap = new HashMap<>();
 		for (ModuleImplsInstance implsInst : instances) {
 			ModuleInst modInst = design.createModuleInst(implsInst.getName(), implsInst.getCurrentModuleImplementation());
@@ -2353,6 +2355,9 @@ public class DesignTools {
 			Net net = null;
 			for (ImplsInstancePort port : path) {
 				Net portNet = findPortNet(port, instanceMap);
+				if (portNet == null) {
+					continue;
+				}
 				if (net == null) {
 					net = portNet;
 				} else if (port.isOutputPort()) {

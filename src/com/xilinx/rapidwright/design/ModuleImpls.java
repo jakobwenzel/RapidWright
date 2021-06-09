@@ -26,6 +26,7 @@ package com.xilinx.rapidwright.design;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
@@ -125,6 +126,7 @@ public class ModuleImpls extends ArrayList<Module> {
 							mod.getAllValidPlacements().stream()
 									.map(site -> new ModulePlacement(mod.getImplementationIndex(), site))
 					)
+					.sorted(Comparator.comparing(p->p.placement.getTile().getColumn()))
 					.collect(Collectors.toList());
 		}
 		return allPlacements;
