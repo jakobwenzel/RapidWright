@@ -11,6 +11,8 @@ import com.xilinx.rapidwright.design.TileRectangle;
 import com.xilinx.rapidwright.device.Tile;
 
 public abstract class ImplsInstancePort {
+    private ImplsPath path;
+
     public abstract Stream<Tile> streamTiles();
 
     public abstract String getName();
@@ -18,6 +20,14 @@ public abstract class ImplsInstancePort {
     public abstract boolean isOutputPort();
 
     public abstract void enterToRect(SimpleTileRectangle rect);
+
+    public ImplsPath getPath() {
+        return path;
+    }
+
+    public void setPath(ImplsPath path) {
+        this.path = path;
+    }
 
     public static class SPI extends ImplsInstancePort {
         private final SitePinInst sitePinInst;
