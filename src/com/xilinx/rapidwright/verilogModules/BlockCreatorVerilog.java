@@ -31,7 +31,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -58,28 +57,6 @@ public class BlockCreatorVerilog {
 		try {
 			Files.createDirectories(verilogFile.getParent());
 			Files.copy(core.getVerilogImplementation(), verilogFile);
-		} catch (IOException e) {
-			throw new UncheckedIOException(e);
-		}
-	}
-
-	private static void verifyVerilogIdentical(Path verilogFile, IPCore core) {
-		try {
-			Iterator<String> cacheLines = Files.lines(verilogFile).iterator();
-			Iterator<String> projectLines = Files.lines(core.getVerilogImplementation()).iterator();
-
-			while (cacheLines.hasNext() || projectLines.hasNext()) {
-				if (cacheLines.hasNext() != projectLines.hasNext()) {
-					throw new RuntimeException("Cached Verilog file at\n"+verilogFile+"\nhas different line count than project file at\n"+core.getVerilogImplementation());
-				}
-				String cacheLine = cacheLines.next();
-				String projectLine = projectLines.next();
-
-				if (!cacheLine.equals(projectLine)) {
-					throw new RuntimeException("Cached Verilog file at\n"+verilogFile+"\nhas differing line than project file at\n"+core.getVerilogImplementation()+"\n"+cacheLine+" vs "+projectLine);
-				}
-			}
-
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}
