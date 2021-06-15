@@ -103,21 +103,27 @@ public class RelocatableTileRectangle extends TileRectangle {
     private Tile[][] maxRowArr;
 
 
+    private String failedReloc(Tile template, Tile newAnchor, Tile originalAnchor) {
+        Module.getCorrespondingTile(template, newAnchor, originalAnchor, minColumnArr);
+        return "Failed to find corresponding tile for "+template+" when relocating from "+originalAnchor+" to "+newAnchor+". Rect: "+toString();
+    }
+
     //private Map<Tile, Map<Tile, RelocatableTileRectangle>> correspondings = new HashMap<>();
     public RelocatableTileRectangle getCorresponding(Tile newAnchor, Tile originalAnchor) {
        // return correspondings.computeIfAbsent(originalAnchor, x->new HashMap<>())
         //        .computeIfAbsent(newAnchor, x -> {
         if (minColumnArr == null) {
             minColumnArr = newAnchor.getDevice().getTilesByNameRoot(minColumn.getNameRoot());
-            maxColumnArr = newAnchor.getDevice().getTilesByNameRoot(minColumn.getNameRoot());
-            minRowArr = newAnchor.getDevice().getTilesByNameRoot(minColumn.getNameRoot());
-            maxRowArr = newAnchor.getDevice().getTilesByNameRoot(minColumn.getNameRoot());
+            maxColumnArr = newAnchor.getDevice().getTilesByNameRoot(maxColumn.getNameRoot());
+            minRowArr = newAnchor.getDevice().getTilesByNameRoot(minRow.getNameRoot());
+            maxRowArr = newAnchor.getDevice().getTilesByNameRoot(maxRow.getNameRoot());
         }
+
         return new RelocatableTileRectangle(
-                Module.getCorrespondingTile(minColumn, newAnchor, originalAnchor, minColumnArr),
-                Module.getCorrespondingTile(maxColumn, newAnchor, originalAnchor, maxColumnArr),
-                Module.getCorrespondingTile(minRow, newAnchor, originalAnchor, minRowArr),
-                Module.getCorrespondingTile(maxRow, newAnchor, originalAnchor, maxRowArr)
+                Objects.requireNonNull(Module.getCorrespondingTile(minColumn, newAnchor, originalAnchor, minColumnArr), ()->failedReloc(minColumn, newAnchor, originalAnchor)),
+                Objects.requireNonNull(Module.getCorrespondingTile(maxColumn, newAnchor, originalAnchor, maxColumnArr), ()->failedReloc(maxColumn, newAnchor, originalAnchor)),
+                Objects.requireNonNull(Module.getCorrespondingTile(minRow, newAnchor, originalAnchor, minRowArr), ()->failedReloc(minRow, newAnchor, originalAnchor)),
+                Objects.requireNonNull(Module.getCorrespondingTile(maxRow, newAnchor, originalAnchor, maxRowArr), ()->failedReloc(maxRow, newAnchor, originalAnchor))
         );
    //             });
     }
