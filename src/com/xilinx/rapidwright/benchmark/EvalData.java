@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.xilinx.rapidwright.design.Design;
 import com.xilinx.rapidwright.design.SiteInst;
@@ -44,8 +45,8 @@ public class EvalData {
     }
 
     private static <T> Map<T, Long> fromTsv(Path p, Function<String, T> valueReader) {
-        try {
-            return Files.lines(p)
+        try (Stream<String> lines = Files.lines(p)){
+            return lines
                     .map(line -> {
                         final String[] split = line.split("\t");
                         if (split.length!=2) {
@@ -103,9 +104,12 @@ public class EvalData {
             if (!Files.exists(maxFreq)) {
                 return -1;
             }
-            final Path dir = Files.list(maxFreq)
-                    .filter(Files::isDirectory).min(Comparator.comparing(d -> Math.abs(freqFromDirName(d) - benchmarkResult.minPeriodMet)))
-                    .orElseThrow(() -> new RuntimeException("noting found"));
+            final Path dir;
+            try (Stream<Path> list = Files.list(maxFreq)) {
+                dir = list
+                        .filter(Files::isDirectory).min(Comparator.comparing(d -> Math.abs(freqFromDirName(d) - benchmarkResult.minPeriodMet)))
+                        .orElseThrow(() -> new RuntimeException("noting found"));
+            }
 
             final List<String> lines = Files.readAllLines(dir.resolve("timing_summary.txt"));
             List<String> content = new ArrayList<>();

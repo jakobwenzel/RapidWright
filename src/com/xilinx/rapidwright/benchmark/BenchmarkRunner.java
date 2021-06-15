@@ -11,15 +11,18 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.LongSummaryStatistics;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.xilinx.rapidwright.design.blocks.PBlockGenerator;
 import com.xilinx.rapidwright.device.TileTypeEnum;
 import com.xilinx.rapidwright.tests.CodePerfTracker;
 import com.xilinx.rapidwright.util.FileTools;
@@ -86,6 +89,8 @@ public class BenchmarkRunner {
                 .accepts("reuseMaxFreq", "Reuse Maximum Frequency Data");
         OptionSpecBuilder evalOnlyOption = optionParser
                 .accepts("evalOnly", "Only do performance evaluation");
+        OptionSpecBuilder noRerunOption = optionParser
+                .accepts("noRerun", "Do not rerun Benchmarks that already have results");
 
 
         OptionSet options;
@@ -109,15 +114,16 @@ public class BenchmarkRunner {
         PlacerType placer = options.valueOf(placerOption);
         boolean reuseMaxFreq = options.has(reuseMaxFreqOption);
         boolean evalOnly = options.has(evalOnlyOption);
+        boolean noRerun = options.has(noRerunOption);
 
         if (options.has(runOption)) {
             run(workDir, cache, findRun(benchmark, placer, options.valueOf(regularOption)), reuseMaxFreq, evalOnly);
         } else if (options.has(lsfOption)) {
             String regular = options.valueOf(regularOption);
             if (regular == null) {
-                runLsf(workDir, cache, getBenchmarkList(benchmark), getPlacerList(placer), reuseMaxFreq, evalOnly);
+                runLsf(workDir, cache, getBenchmarkList(benchmark), getPlacerList(placer), reuseMaxFreq, evalOnly, noRerun);
             } else {
-                runLsf(workDir, cache, Stream.of(findRegularRun(regular)),reuseMaxFreq, evalOnly);
+                runLsf(workDir, cache, Stream.of(findRegularRun(regular)),reuseMaxFreq, evalOnly, noRerun);
             }
         } else if (options.has(resultsOption)) {
             showResults(workDir, getBenchmarkList(benchmark), getPlacerList(placer));
@@ -125,7 +131,6 @@ public class BenchmarkRunner {
             throw new RuntimeException("no mode");
         }
     }
-
     private static void resultsTable(Path output, Map<SomeRun, BenchmarkResult> results, Function<BenchmarkResult, String> extractor, boolean onlyOne) throws IOException {
         try (PrintWriter pw = new PrintWriter(Files.newBufferedWriter(output))) {
             List<Benchmark> benchmarks = results.keySet().stream()
@@ -150,26 +155,28 @@ public class BenchmarkRunner {
             benchmarks.forEach(benchmark -> {
                 pw.print(benchmark.getId().replaceAll("rwExport","bottom_up"));
 
-                for (PlacerType value : PlacerType.values()) {
+
+                Consumer<PlacerType> printEval = value -> {
                     final BenchmarkRun benchmarkRun = new BenchmarkRun(benchmark, value);
                     BenchmarkResult result = results.get(benchmarkRun);
                     if (result == null) {
                         throw new NullPointerException("did not find result for " + benchmarkRun);
                     }
                     pw.print("\t" + extractor.apply(result));
-                    if (onlyOne) {
-                        break;
-                    }
-                }
+                };
 
-                if (!onlyOne) {
+                if (onlyOne) {
+                    printEval.accept(PlacerType.NewImplsIgnoreClk);
+                    pw.println();
+                } else {
+                    for (PlacerType value : PlacerType.values()) {
+                        printEval.accept(value);
+                    }
                     final BenchmarkResult regular = results.get(benchmark.getRegularRun());
                     if (regular == null) {
                         throw new NullPointerException("did not find regular result for " + benchmark);
                     }
                     pw.println("\t" + extractor.apply(regular));
-                } else {
-                    pw.println();
                 }
 
             });
@@ -177,15 +184,66 @@ public class BenchmarkRunner {
 
     }
 
-    private static void resultsTableExceptionCheck(Path output, Map<SomeRun, BenchmarkResult> results, Function<BenchmarkResult, String> extractor, boolean onlyOne) throws IOException {
+
+    private static String pblockDetails(BenchmarkResult result, Path workDirRoot, boolean isPblockError) {
+
+        if (!(result.run instanceof  BenchmarkRun)) {
+            return "weird";
+        }
+        if (!(((BenchmarkRun) result.run).benchmark instanceof VerilogStitcherBenchmark)) {
+            return "weird";
+        }
+        final VerilogStitcherBenchmark benchmark = (VerilogStitcherBenchmark) ((BenchmarkRun) result.run).benchmark;
+
+
+        final Map<String, Integer> instanceCounts = benchmark.getModuleHashes().getFirst();
+        Path cache = workDirRoot.resolve(benchmark.getId()).resolve("cache");
+
+
+        final int[] total = {0};
+        final int[] pblock = {0};
+        final int[] other = {0};
+        instanceCounts.keySet().stream()
+                .sorted()
+                .forEach(hash-> {
+                    final Path dir = cache.resolve(benchmark.partName + "_" + hash);
+
+                    final Path reportFilename = dir.resolve("design_utilization.report");
+                    final boolean synthSuccessful = Files.exists(reportFilename);
+                    final boolean routeSuccessful = Files.exists(dir.resolve("design_0_routed.dcp"));
+                    boolean pblockSuccessful = isPblockSuccessful(dir);
+
+                    total[0]++;
+                    if (!pblockSuccessful) {
+                        pblock[0]++;
+                    } else {
+                        if (!routeSuccessful) {
+                            other[0]++;
+                        }
+                    }
+                });
+
+        String prefix;
+        int num;
+        if (isPblockError) {
+            prefix = "PBlock:";
+            num = pblock[0];
+        } else {
+            prefix = "Overfull:";
+            num = other[0];
+        }
+        return prefix + num+"/" + total[0];
+    }
+
+    private static void resultsTableExceptionCheck(Path output, Map<SomeRun, BenchmarkResult> results, Function<BenchmarkResult, String> extractor, boolean onlyOne, Path workDirRoot) throws IOException {
 
         resultsTable(output, results, br -> {
             if (br.exception != null) {
                 if (br.exception.contains("PBlockGenerator couldn't match a compatible pattern with ")) {
-                    return "pblock";
+                    return pblockDetails(br, workDirRoot, true);
                 }
                 if (br.exception.contains("The packing of LUTRAM/SRL instances into capable slices could not be obeyed.")) {
-                    return "overfull";
+                    return pblockDetails(br, workDirRoot, false);
                 }
                 if (br.exception.contains("not yet run")) {
                     return "notRun";
@@ -240,8 +298,11 @@ public class BenchmarkRunner {
         try {
             Path evalDir = workDir.resolve("evaluation");
             Files.createDirectories(evalDir);
-            resultsTableExceptionCheck(evalDir.resolve("frequency.tsv"), results, br -> String.format("%.1fMHz", 1000 / br.minPeriodMet), false);
+            resultsTableExceptionCheck(evalDir.resolve("frequency.tsv"), results, br -> String.format("%.1fMHz", 1000 / br.minPeriodMet), false, workDir);
             resultsTableExceptionCheck(evalDir.resolve("placerRuntime.tsv"), results, br -> {
+                if (br.run instanceof RegularRun) {
+                    return "";
+                }
                 final List<BenchmarkResult.RuntimeLog> logLine = br.runtimes.stream().filter(r -> r.name.equals("Place Design")).collect(Collectors.toList());
                 if (logLine.isEmpty()) {
                     return "?";
@@ -250,20 +311,39 @@ public class BenchmarkRunner {
                     return "multiple";
                 }
                 return String.format("%.3fs",logLine.get(0).runtime*1E-9);
-            }, false);
+            }, false, workDir);
             resultsTableExceptionCheck(evalDir.resolve("modulesInCriticalPath.tsv"), results, br -> {
                 EvalData data = br.getEvalData(workDir);
                 if (data == null) {
                     return "?!";
                 }
                 return String.valueOf(data.modulesInCriticalPath);
-            }, false);
-            resultsTableExceptionCheck(evalDir.resolve("numModules.tsv"), results, br -> {
-                EvalData data = br.getEvalData(workDir);
+            }, false, workDir);
+            resultsTable(evalDir.resolve("numModules.tsv"), results, br -> {
+                /*EvalData data = br.getEvalData(workDir);
                 if (data == null) {
                     return "?!";
+                }*/
+                if (!(br.run instanceof BenchmarkRun)) {
+                    return "?";
                 }
-                return data.numModuleInstances +"\t"+data.numModules;
+                final Benchmark b = ((BenchmarkRun) br.run).benchmark;
+                if (!(b instanceof VerilogStitcherBenchmark)) {
+                    return "..";
+                }
+                VerilogStitcherBenchmark benchmark = ((VerilogStitcherBenchmark) b);
+                Path cache = workDir.resolve(benchmark.getId()).resolve("cache");
+                final Pair<Map<String, Integer>, Integer> moduleHashes = benchmark.getModuleHashes();
+
+                final Map<Boolean, List<String>> bySuccess = moduleHashes.getFirst().keySet().stream()
+                        .collect(Collectors.partitioningBy(hash -> isPblockSuccessful(
+                                cache.resolve(benchmark.partName + "_" + hash))));
+
+                final int successInsts = bySuccess.get(true).stream().mapToInt(h -> moduleHashes.getFirst().get(h)).sum();
+                final int failInsts = bySuccess.get(false).stream().mapToInt(h -> moduleHashes.getFirst().get(h)).sum();
+
+                return bySuccess.get(true).size()+"\t"+successInsts+"\t"+bySuccess.get(false).size()+"\t"+failInsts;
+                //return data.numModuleInstances +"\t"+data.numModules;
             }, true);
             resultsTableExceptionCheck(evalDir.resolve("moduleSize.tsv"), results, br -> {
                 EvalData data = br.getEvalData(workDir);
@@ -283,11 +363,101 @@ public class BenchmarkRunner {
                         .flatMap(m -> m.entrySet().stream())
                         .collect(Collectors.groupingBy(e -> e.getKey(), Collectors.summarizingLong(e -> e.getValue())));
                 return formatEntry("CLE", collect)+"\t"+formatEntry("BRAM", collect)+"\t"+formatEntry("DSP", collect);
-            }, true);
-
+            }, true, workDir);
+            detailedModuleSizes(evalDir.resolve("detailedSizes"), results, workDir);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static Map<Path, PBlockGenerator> pblockGens = new HashMap<>();
+    private static PBlockGenerator readUsageReport(Path report) {
+        return pblockGens.computeIfAbsent(report, p->{
+            PBlockGenerator res = new PBlockGenerator();
+            res.getResourceUsages(p.toString());
+            return res;
+        });
+    }
+
+    private static String analyzeCacheInst(String hash, Path cacheEntry, int instCount) {
+
+        final Path reportFilename = cacheEntry.resolve("design_utilization.report");
+        final boolean synthSuccessful = Files.exists(reportFilename);
+        final boolean routeSuccessful = Files.exists(cacheEntry.resolve("design_0_routed.dcp"));
+        boolean pblockSuccessful = isPblockSuccessful(cacheEntry);
+
+
+        String pblock = "";
+        if (synthSuccessful) {
+            final PBlockGenerator pBlockGenerator = readUsageReport(reportFilename);
+            pblock = "\t"+Stream.of(
+                    pBlockGenerator.lutCount,
+                    pBlockGenerator.lutRAMCount,
+                    pBlockGenerator.regCount,
+                    pBlockGenerator.dspCount,
+                    pBlockGenerator.carryCount,
+                    pBlockGenerator.bram18kCount,
+                    pBlockGenerator.bram36kCount
+            ).map(i->Integer.toString(i)).collect(Collectors.joining("\t"));
+        }
+
+        return hash + "\t" + instCount+"\t"+synthSuccessful+"\t"+pblockSuccessful+"\t"+routeSuccessful+pblock;
+
+    }
+
+    private static boolean isPblockSuccessful(Path dir) {
+        final Path pblockOutput = dir.resolve("design_pblock.txt");
+        if (Files.exists(pblockOutput)) {
+            try (Stream<String> lines = Files.lines(pblockOutput)) {
+                return lines.noneMatch(s -> s.toLowerCase().contains("failed"));
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+
+        final Path reportFilename = dir.resolve("design_utilization.report");
+        if (!Files.exists(reportFilename)) {
+            return false;
+        }
+        final PBlockGenerator pblockGenerator = readUsageReport(reportFilename);
+
+        return pblockGenerator.lutCount == 0 &&
+                pblockGenerator.lutRAMCount == 0 &&
+                pblockGenerator.regCount == 0 &&
+                pblockGenerator.dspCount == 0 &&
+                pblockGenerator.carryCount == 0 &&
+                pblockGenerator.bram18kCount == 0 &&
+                pblockGenerator.bram36kCount == 0;
+    }
+
+    private static void detailedModuleSizes(Path evalDir, Map<SomeRun, BenchmarkResult> results, Path workDirRoot) {
+        results.keySet().stream().flatMap(r->r instanceof BenchmarkRun ? Stream.of((BenchmarkRun)r):Stream.empty())
+                .map(r->r.benchmark)
+                .flatMap(b->b instanceof VerilogStitcherBenchmark ? Stream.of((VerilogStitcherBenchmark)b):Stream.empty())
+                .forEach(benchmark -> {
+                    Path cache = workDirRoot.resolve(benchmark.getId()).resolve("cache");
+                    final Path output = evalDir.resolve(benchmark.getId() + ".tsv");
+                    try {
+                        Files.createDirectories(output.getParent());
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+
+
+                    final Map<String, Integer> instanceCounts = benchmark.getModuleHashes().getFirst();
+
+                    try (PrintWriter pw = new PrintWriter(Files.newBufferedWriter(output))) {
+                        pw.println("Cache\tInst.Count\tSynth\tpblock\tRoute\tlut\tlutRAM\treg\tdsp\tcarry\tbram18k\tbram36k");
+                        instanceCounts.keySet().stream()
+                                .sorted()
+                                .forEach(hash-> {
+                                    final Path dir = cache.resolve(benchmark.partName + "_" + hash);
+                                    pw.println(analyzeCacheInst(hash, dir, instanceCounts.get(hash)));
+                                });
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
     }
 
     private static String formatEntry(String name, Map<String, LongSummaryStatistics> collect) {
@@ -306,7 +476,7 @@ public class BenchmarkRunner {
         return key.toString();
     }
 
-    private static void runLsf(Path workDir, Path cache, Stream<SomeRun> runs, boolean reuseMaxFreq, boolean evalOnly) throws IOException {
+    private static void runLsf(Path workDir, Path cache, Stream<SomeRun> runs, boolean reuseMaxFreq, boolean evalOnly, boolean noRerun) throws IOException {
         //Check early :)
         FileTools.getVivadoPath();
 
@@ -330,6 +500,13 @@ public class BenchmarkRunner {
 
         JobQueue queue = new JobQueue();
         runs
+                .filter(run -> {
+                    if (noRerun && Files.exists(run.getJobDir(workDir))) {
+                        System.out.println("Not rerunning "+run.getId());
+                        return false;
+                    }
+                    return true;
+                })
                 .forEach(run -> {
                     final Job j = JobQueue.createJob();
                     j.setCommand(benchmarkCommand+" --run "+run.getRunArguments());
@@ -340,8 +517,8 @@ public class BenchmarkRunner {
         queue.runAllToCompletion();
     }
 
-    private static void runLsf(Path workDir, Path cache, List<Benchmark> benchmarks, List<PlacerType> placers, boolean reuseMaxFreq, boolean evalOnly) throws IOException {
-        runLsf(workDir, cache, getAllRuns(benchmarks, placers), reuseMaxFreq, evalOnly);
+    private static void runLsf(Path workDir, Path cache, List<Benchmark> benchmarks, List<PlacerType> placers, boolean reuseMaxFreq, boolean evalOnly, boolean noRerun) throws IOException {
+        runLsf(workDir, cache, getAllRuns(benchmarks, placers), reuseMaxFreq, evalOnly, noRerun);
     }
 
     private static List<PlacerType> getPlacerList(PlacerType singlePlacer) {

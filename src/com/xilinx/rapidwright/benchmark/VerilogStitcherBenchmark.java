@@ -5,9 +5,9 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Stream;
 
 import com.xilinx.rapidwright.design.Design;
@@ -24,31 +24,47 @@ import com.xilinx.rapidwright.verilogModules.VerilogStitcher;
 public class VerilogStitcherBenchmark extends Benchmark {
     public final Path dir;
     private final Path benchmarkRoot;
-    private final String partName = "xcvu065-ffvc1517-3-e";
+    private final boolean isRosetta;
+    private final String top;
+    private final String clkPortName;
+    protected final String partName = "xcvu065-ffvc1517-3-e";
 
-    public VerilogStitcherBenchmark(String name, Path dir, Path benchmarkRoot) {
+    public VerilogStitcherBenchmark(String name, Path dir, Path benchmarkRoot, boolean isRosetta, String top, String clkPortName) {
         super(name);
         this.dir = dir;
         this.benchmarkRoot = benchmarkRoot;
+        this.isRosetta = isRosetta;
+        this.top = top;
+        this.clkPortName = clkPortName;
     }
 
-    public static Stream<VerilogStitcherBenchmark> getBenchmarks() {
-        Path baseDir = PathConfig.getYomoRosetta();
-
+    private static Stream<VerilogStitcherBenchmark> getBenchmarks(Path root, boolean isRosetta, String top, String clkPortName) {
         try {
-            return Files.list(baseDir).filter(Files::isDirectory).flatMap(VerilogStitcherBenchmark::listBenchmarkFolder);
+            return Files.list(root)
+                    .filter(Files::isDirectory)
+                    .flatMap((Path dir1) -> listBenchmarkFolder(dir1,isRosetta, top, clkPortName));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
-    private static Stream<VerilogStitcherBenchmark> listBenchmarkFolder(Path dir) {
+    public static Stream<VerilogStitcherBenchmark> getBenchmarks() {
+        Path baseDir = PathConfig.getYomoRosetta();
+        Path seismicDir = PathConfig.getYomoSeismic();
+
+        final Stream<VerilogStitcherBenchmark> rosettaBechmarks = getBenchmarks(baseDir, true, null, null);
+        final Stream<VerilogStitcherBenchmark> seismic = getBenchmarks(seismicDir, false, "k7", "clk");
+        return Stream.concat (rosettaBechmarks, seismic);
+    }
+
+    private static Stream<VerilogStitcherBenchmark> listBenchmarkFolder(Path dir, boolean isRosetta, String top, String clkPortName) {
         try {
             Path partitionerDir = dir.resolve("partitioner");
             Stream<Path> partitioners = Files.isDirectory(partitionerDir) ? Files.list(partitionerDir) : Stream.empty();
             Stream<Path> subdirs = Stream.concat(partitioners, Stream.of(dir.resolve("rwExport")));
 
-            return subdirs.filter(Files::isDirectory).map(d -> new VerilogStitcherBenchmark(dir.getFileName() + "/" + d.getFileName(), d, dir));
+            return subdirs.filter(Files::isDirectory)
+                    .map(d -> new VerilogStitcherBenchmark(dir.getFileName() + "/" + d.getFileName(), d, dir, isRosetta, top, clkPortName));
 
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -106,7 +122,7 @@ public class VerilogStitcherBenchmark extends Benchmark {
 
     @Override
     public RegularRun getRegularRun() {
-        return new VerilogStitcherRegularRun(benchmarkRoot);
+        return new VerilogStitcherRegularRun(benchmarkRoot, isRosetta, top, partName, clkPortName);
     }
 
     @Override
@@ -116,24 +132,25 @@ public class VerilogStitcherBenchmark extends Benchmark {
 
     @Override
     public String getClockName() {
-        return "ap_clk";
+        return clkPortName;
     }
 
 
 
-    private Pair<Set<String>, Integer> hashesCached = null;
-    public Pair<Set<String>, Integer> getModuleHashes() {
+    private Pair<Map<String, Integer>, Integer> hashesCached = null;
+    public Pair<Map<String, Integer>, Integer> getModuleHashes() {
         if (hashesCached == null) {
             final EDIFNetlist edifNetlist = EDIFTools.readEdifFile(dir.resolve("design.edf"));
 
             int numModules = 0;
-            Set<String> cacheIds = new HashSet<>();
+            Map<String, Integer> cacheIds = new HashMap<>();
 
             for (EDIFCellInst cellInst : edifNetlist.getTopCell().getCellInsts()) {
                 final EDIFPropertyValue hash = cellInst.getCellType().getProperty("hash");
                 if (hash != null) {
                     numModules++;
-                    cacheIds.add(hash.getValue());
+                    final Integer prevCount = cacheIds.computeIfAbsent(hash.getValue(), x -> 0);
+                    cacheIds.put(hash.getValue(), prevCount+1);
                 }
             }
 
@@ -144,7 +161,7 @@ public class VerilogStitcherBenchmark extends Benchmark {
 
     @Override
     public Pair<Integer, Integer> getModuleCounts() {
-        final Pair<Set<String>, Integer> moduleHashes = getModuleHashes();
+        final Pair<Map<String, Integer>, Integer> moduleHashes = getModuleHashes();
 
         return new Pair<>(moduleHashes.getFirst().size(), moduleHashes.getSecond());
     }
@@ -153,7 +170,7 @@ public class VerilogStitcherBenchmark extends Benchmark {
     public Stream<Pair<Path, Path>> getModuleDcps(Path workDirRoot) {
         //TODO use normal cache once we have locking
         Path cache = workDirRoot.resolve(getId()).resolve("cache");
-        return getModuleHashes().getFirst().stream().map(hash-> {
+        return getModuleHashes().getFirst().keySet().stream().map(hash-> {
             final Path dir = cache.resolve(partName + "_" + hash);
             return new Pair<>(dir.resolve("design_0_routed.dcp"), dir.resolve("design_routed.edf"));
         });

@@ -99,13 +99,13 @@ public class PBlockGenerator {
 	public static final String GLOBAL_PBLOCK_OPT 	  = "p";  //  File containig already implemented pblocks for free resources computation
 	public static final String IP_NR_INSTANCES_OPT    = "i";	 
 	Device dev = null;
-	int lutCount = 0;
-	int lutRAMCount = 0;
-	int regCount = 0;
-	int dspCount = 0;
-	int carryCount = 0;
-	int bram18kCount = 0;
-	int bram36kCount = 0;
+	public int lutCount = 0;
+	public int lutRAMCount = 0;
+	public int regCount = 0;
+	public int dspCount = 0;
+	public int carryCount = 0;
+	public int bram18kCount = 0;
+	public int bram36kCount = 0;
 	int tallestShape = 0;
 	int widestShape = 0;
 	int shapeArea = 0;
@@ -131,7 +131,7 @@ public class PBlockGenerator {
 		return emitter;
 	}
 	
-	private void getResourceUsages(String reportFileName){
+	public void getResourceUsages(String reportFileName){
 		ArrayList<String> lines = FileTools.getLinesFromTextFile(reportFileName);
 		
 		for(String line : lines){
@@ -173,8 +173,7 @@ public class PBlockGenerator {
 			System.out.println(" LUTRams: " + lutRAMCount);
 			System.out.println("18kBRAMs: " + bram18kCount);
 			System.out.println("36kBRAMs: " + bram36kCount);
-		} 
-		if(lutCount < LUTS_PER_CLE) lutCount = LUTS_PER_CLE;
+		}
 	}
 	
 	private void getTallestShape(String shapesReportFileName){
@@ -758,6 +757,7 @@ public class PBlockGenerator {
 	
 	public ArrayList<String> generatePBlockFromReport2(String reportFileName, String shapesReportFileName){
 		getResourceUsages(reportFileName);
+		if(lutCount < LUTS_PER_CLE) lutCount = LUTS_PER_CLE;
 		getTallestShape(shapesReportFileName);
 		calculateStartingPoint();
 		return createConstraints();
@@ -812,6 +812,7 @@ public class PBlockGenerator {
 	
 	public ArrayList<String> generatePBlockFromReport(String reportFileName, String shapesReportFileName){
 		getResourceUsages(reportFileName);
+		if(lutCount < LUTS_PER_CLE) lutCount = LUTS_PER_CLE;
 		getTallestShape(shapesReportFileName);
 		
 		// Let's calculate exactly how many sites we need of each type
