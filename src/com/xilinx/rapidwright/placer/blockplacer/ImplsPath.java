@@ -1,6 +1,8 @@
 package com.xilinx.rapidwright.placer.blockplacer;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.xilinx.rapidwright.design.ModuleImplsInstance;
@@ -19,6 +21,7 @@ public class ImplsPath extends AbstractPath<ImplsInstancePort, ModuleImplsInstan
         if (port instanceof ImplsInstancePort.InstPort) {
             moduleInsts.add(((ImplsInstancePort.InstPort) port).getInstance());
         }
+        port.setPath(this);
     }
 
 
@@ -79,5 +82,15 @@ public class ImplsPath extends AbstractPath<ImplsInstancePort, ModuleImplsInstan
     @Override
     public Stream<Tile> streamTiles() {
         return ports.stream().flatMap(ImplsInstancePort::streamTiles);
+    }
+
+    public ImplsInstancePort findSource() {
+        final List<ImplsInstancePort> sources = ports.stream().filter(ImplsInstancePort::isOutputPort).collect(Collectors.toList());
+        if (sources.size()>1) {
+            throw new IllegalStateException("Multiple sources at " + getName() + ": " + sources);
+        } else if (sources.isEmpty()) {
+            return null;
+        }
+        return sources.get(0);
     }
 }

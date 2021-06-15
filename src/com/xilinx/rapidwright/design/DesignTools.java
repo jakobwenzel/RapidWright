@@ -43,6 +43,7 @@ import java.util.Map.Entry;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.xilinx.rapidwright.design.blocks.UtilizationType;
 import com.xilinx.rapidwright.device.BEL;
@@ -2201,7 +2202,8 @@ public class DesignTools {
 			return net;
 		} else if (port instanceof ImplsInstancePort.InstPort) {
 			ImplsInstancePort.InstPort instPort = (ImplsInstancePort.InstPort) port;
-			Port modPort = instPort.getInstance().getCurrentModuleImplementation().getPort(instPort.getPort());
+			final Module module = instPort.getInstance().getCurrentModuleImplementation();
+			Port modPort = module.getPort(instPort.getPort());
 			ModuleInst moduleInst = instanceMap.get(instPort.getInstance());
 			Net net = moduleInst.getCorrespondingNet(modPort);
 			if (net == null && !modPort.getSitePinInsts().isEmpty()) {
@@ -2209,7 +2211,15 @@ public class DesignTools {
 			}
 
 			if (!modPort.getPassThruPortNames().isEmpty() && port.isOutputPort()) {
-				System.err.println("Passthrough not yet supported: "+instPort.getInstance().getName()+"."+instPort.getName()+" passes through "+modPort.getPassThruPortNames());
+				final List<String> inPorts = modPort.getPassThruPortNames().stream().filter(p -> !module.getPort(p).isOutPort())
+						.collect(Collectors.toList());
+				if (inPorts.size()>1) {
+					throw new IllegalStateException("Multiple inputs connected to "+instPort.getInstance().getName()+"."+instPort.getName()+": "+inPorts);
+				} else if (inPorts.size() == 1) {
+					final ImplsInstancePort otherPort = instPort.getInstance().getPort(inPorts.get(0));
+					final ImplsInstancePort source = otherPort.getPath().findSource();
+					return findPortNet(source, instanceMap);
+				} //Else we only have multiple outs sourced by the same Pin internally, nothing to do
 			}
 
 			return net;
