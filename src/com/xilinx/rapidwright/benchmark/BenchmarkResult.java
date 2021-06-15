@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.xilinx.rapidwright.tests.CodePerfTracker;
 import org.json.JSONArray;
@@ -108,6 +109,10 @@ public class BenchmarkResult {
     EvalData evalData = null;
     public EvalData getEvalData(Path workDirRoot) {
         if (evalData == null) {
+            if (jsonFile == null) {
+                System.out.println("null json file?");
+                return null;
+            }
             evalData = EvalData.fromRunDir(jsonFile.getParent(), run, workDirRoot, this);
         }
         return evalData;
@@ -129,7 +134,9 @@ public class BenchmarkResult {
                 final List<Path> crashLog;
                 final Path parent = json.getParent();
                 if (Files.exists(parent)) {
-                    crashLog = Files.list(parent).filter(f -> f.getFileName().toString().matches("hs_err_pid.*\\.log")).collect(Collectors.toList());
+                    try (Stream<Path> list = Files.list(parent)) {
+                        crashLog = list.filter(f -> f.getFileName().toString().matches("hs_err_pid.*\\.log")).collect(Collectors.toList());
+                    }
                 } else {
                     crashLog = Collections.emptyList();
                 }

@@ -4,6 +4,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class PathConfig {
+    public static Path getYomoSeismic() {
+        final Path resolve = getRwrWorkdir();
+        return resolve.resolve("yomo").resolve("seismic");
+    }
     public static Path getYomoRosetta() {
         final Path resolve = getRwrWorkdir();
         return resolve.resolve("yomo").resolve("rosetta");

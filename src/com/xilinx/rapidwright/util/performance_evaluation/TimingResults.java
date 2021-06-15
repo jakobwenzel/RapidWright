@@ -3,6 +3,7 @@ package com.xilinx.rapidwright.util.performance_evaluation;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.stream.Stream;
 
 public class TimingResults {
     public final double worstSlack;
@@ -46,33 +47,36 @@ public class TimingResults {
 
         String contentLine = null;
         Boolean met = null;
-        LINE_LOOP: for (String line : (Iterable<String>)Files.lines(file)::iterator) {
-            switch (ps) {
-                case BeforeTable:
-                    if (line.contains("| Design Timing Summary")) {
-                        ps = ParseState.BeforeSeparator;
-                    }
-                    break;
-                case BeforeSeparator:
-                    if (line.contains("    ") && line.contains("----")) {
-                        ps = ParseState.InContent;
-                    }
-                    break;
-                case InContent:
-                    contentLine = line;
-                    ps = ParseState.BeforeMetLine;
-                    break;
-                case BeforeMetLine:
-                    if (line.startsWith("All user specified timing constraints are met.")) {
-                        met = true;
-                        break LINE_LOOP;
-                    } else if (line.startsWith("Timing constraints are not met.")) {
-                        met = false;
-                        break LINE_LOOP;
-                    }
-                    break;
-            }
+        try (Stream<String> lines = Files.lines(file)) {
+            LINE_LOOP:
+            for (String line : (Iterable<String>) lines::iterator) {
+                switch (ps) {
+                    case BeforeTable:
+                        if (line.contains("| Design Timing Summary")) {
+                            ps = ParseState.BeforeSeparator;
+                        }
+                        break;
+                    case BeforeSeparator:
+                        if (line.contains("    ") && line.contains("----")) {
+                            ps = ParseState.InContent;
+                        }
+                        break;
+                    case InContent:
+                        contentLine = line;
+                        ps = ParseState.BeforeMetLine;
+                        break;
+                    case BeforeMetLine:
+                        if (line.startsWith("All user specified timing constraints are met.")) {
+                            met = true;
+                            break LINE_LOOP;
+                        } else if (line.startsWith("Timing constraints are not met.")) {
+                            met = false;
+                            break LINE_LOOP;
+                        }
+                        break;
+                }
 
+            }
         }
         if (contentLine == null || met == null) {
             throw new RuntimeException("did not find timing resuult line in "+file);

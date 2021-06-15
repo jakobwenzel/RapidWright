@@ -15,7 +15,9 @@ public class BenchmarkFactory {
 
     public static Map<String, Benchmark> getBenchmarkMap() {
         if (benchmarks == null) {
-            benchmarks = streamBenchmarks().collect(Collectors.toMap(Benchmark::getId, Function.identity()));
+            try (Stream<? extends Benchmark> stream = streamBenchmarks()) {
+                benchmarks = stream.collect(Collectors.toMap(Benchmark::getId, Function.identity()));
+            }
         }
         return benchmarks;
     }

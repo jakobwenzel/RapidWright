@@ -109,12 +109,20 @@ public class PerformanceEvaluation {
             try (PrintWriter pw = new PrintWriter(Files.newBufferedWriter(getScriptName()))) {
 
                 pw.println("open_checkpoint " + dcp);
-                pw.println("create_clock -name " + clkPortName + " -period " + clockPeriod + " [get_ports " + clkPortName + "]");
-                pw.println("route_design");
-                pw.println("report_timing -file " + getTimingReportPath());
-                pw.println("report_timing_summary -file " + getTimingSummaryReportPath());
-                pw.println("write_checkpoint -force " + getRoutedDcp());
+                createClock(pw);
+                routeAndSave(pw);
             }
+        }
+
+        protected void routeAndSave(PrintWriter pw) {
+            pw.println("route_design");
+            pw.println("report_timing -file " + getTimingReportPath());
+            pw.println("report_timing_summary -file " + getTimingSummaryReportPath());
+            pw.println("write_checkpoint -force " + getRoutedDcp());
+        }
+
+        protected void createClock(PrintWriter pw) {
+            pw.println("create_clock -name " + clkPortName + " -period " + clockPeriod + " [get_ports " + clkPortName + "]");
         }
 
         private TimingResults results;
