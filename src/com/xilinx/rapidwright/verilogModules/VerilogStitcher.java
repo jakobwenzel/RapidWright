@@ -12,6 +12,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.xilinx.rapidwright.design.Cell;
 import com.xilinx.rapidwright.design.Design;
@@ -196,16 +197,16 @@ public class VerilogStitcher extends AbstractBlockStitcher {
     }
 
     private Map<String, String> loadNameMapping(Path nameMappingFile) {
-        try {
-            return Files.lines(nameMappingFile)
+        try (Stream<String> lines = Files.lines(nameMappingFile)) {
+            return lines
                     .map(s -> {
                         String[] split = s.split("\t");
                         if (split.length != 2) {
-                            throw new RuntimeException("invalid line: "+s+" in "+nameMappingFile);
+                            throw new RuntimeException("invalid line: " + s + " in " + nameMappingFile);
                         }
                         return split;
                     })
-                    .collect(Collectors.toMap(a->a[0].substring(1), a->a[1].substring(1)));
+                    .collect(Collectors.toMap(a -> a[0].substring(1), a -> a[1].substring(1)));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

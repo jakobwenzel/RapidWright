@@ -15,6 +15,7 @@ import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.trolltech.qt.gui.QApplication;
 import com.xilinx.rapidwright.design.ConstraintGroup;
@@ -707,8 +708,8 @@ public abstract class AbstractBlockStitcher {
         if (!Files.exists(logFile)) {
             return "unknown";
         }
-        try {
-            final String error = Files.lines(logFile).filter(l -> l.trim().startsWith("ERROR")).collect(Collectors.joining("\n"));
+        try (final Stream<String> lines = Files.lines(logFile)){
+            final String error = lines.filter(l -> l.trim().startsWith("ERROR")).collect(Collectors.joining("\n"));
             System.out.println("parsed error from log at "+logFile+": '"+error+"'");
             return error;
         } catch (IOException e) {
