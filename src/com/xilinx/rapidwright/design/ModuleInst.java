@@ -643,4 +643,8 @@ public class ModuleInst extends AbstractModuleInst<Module, ModuleInst>{
 			physicalNet.addPin(inPin);
 		}
 	}
+
+	public RelocatableTileRectangle getBoundingBox() {
+		return module.getBoundingBox().getCorresponding(getAnchor().getTile(), module.getAnchor().getTile());
+	}
 }
