@@ -56,6 +56,7 @@ import com.xilinx.rapidwright.placer.handplacer.HandPlacer;
 import com.xilinx.rapidwright.placer.handplacer.ModuleOptimizer;
 import com.xilinx.rapidwright.router.RouteThruHelper;
 import com.xilinx.rapidwright.router.Router;
+import com.xilinx.rapidwright.summer20.PerfEvalTile;
 import com.xilinx.rapidwright.tests.CheckAccuracyUsingGnlDesigns;
 import com.xilinx.rapidwright.tests.DeviceLoader;
 import com.xilinx.rapidwright.tests.PinMapTester;
@@ -154,6 +155,7 @@ public class MainEntrypoint {
         addFunction("Unzip", Unzip::main);
         addFunction("UpdateRoutingUsingSATRouter", UpdateRoutingUsingSATRouter::main);
         addFunction("VerilogStitcher", VerilogStitcher::main);
+        addFunction("PerfEvalTile", PerfEvalTile::main);
     }
 
     private static void listModes() {

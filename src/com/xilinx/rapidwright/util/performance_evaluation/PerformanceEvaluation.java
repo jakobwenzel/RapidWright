@@ -35,7 +35,7 @@ public class PerformanceEvaluation {
 
     private final Path workDir;
     private final Path dcp;
-    private final boolean reuseExistingResults;
+    protected final boolean reuseExistingResults;
     protected final String clkPortName;
 
     private final List<TimingResults> allResults = new ArrayList<>();
@@ -121,12 +121,16 @@ public class PerformanceEvaluation {
             pw.println("write_checkpoint -force " + getRoutedDcp());
         }
 
-        protected void createClock(PrintWriter pw) {
-            pw.println("create_clock -name " + clkPortName + " -period " + clockPeriod + " [get_ports " + clkPortName + "]");
+        protected void createClock(PrintWriter pw, String clockName) {
+            pw.println("create_clock -name " + clockName + " -period " + clockPeriod + " [get_ports " + clkPortName + "]");
         }
 
-        private TimingResults results;
-        private TimingResults getResults() {
+        protected void createClock(PrintWriter pw) {
+            createClock(pw, clkPortName);
+        }
+
+        protected TimingResults results;
+        protected TimingResults getResults() {
             if (results ==null) {
                 try {
                     results = TimingResults.parseTimingSummaryFile(getTimingSummaryReportPath(), clockPeriod);
