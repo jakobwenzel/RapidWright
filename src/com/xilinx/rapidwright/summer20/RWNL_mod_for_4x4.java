@@ -1,8 +1,14 @@
 package com.xilinx.rapidwright.summer20;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.stream.Stream;
 
 import com.xilinx.rapidwright.design.Design;
 import com.xilinx.rapidwright.design.DesignTools;
@@ -13,61 +19,65 @@ import com.xilinx.rapidwright.design.RelocatableTileRectangle;
 import com.xilinx.rapidwright.design.SiteInst;
 import com.xilinx.rapidwright.design.SitePinInst;
 import com.xilinx.rapidwright.design.TileRectangle;
-import com.xilinx.rapidwright.device.Site;
+import com.xilinx.rapidwright.util.Pair;
+import joptsimple.NonOptionArgumentSpec;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpecBuilder;
 
 public class RWNL_mod_for_4x4 {
 
     public static void main(String[] args) {
+        OptionParser optionParser = new OptionParser();
+        final OptionSpecBuilder optOption = optionParser.accepts("opt");
+        final NonOptionArgumentSpec<String> pathOption = optionParser.nonOptions("Tile Path");
+
+        final OptionSet options = optionParser.parse(args);
+
+        boolean isOpt = options.has(optOption);
+
+
         Design design;
-        if (args.length == 1 && args[0].compareTo("opt") == 0)
-            design = Design.readCheckpoint("USS_opt_u250.dcp");
+        if (isOpt)
+            design = Design.readCheckpoint("./USS_opt_u250.dcp");
         else
-            design = Design.readCheckpoint("shell.dcp");
+            design = Design.readCheckpoint("./shell.dcp");
 
+        Path patternDir = Paths.get(options.valueOf(pathOption));
+        if (!Files.isDirectory(patternDir)) {
+            throw new RuntimeException("not a dir at "+patternDir);
+        }
 
-        Module pattern1 = new Module(Design.readCheckpoint("tile_p1.dcp"));
-        pattern1.setName("pattern1");
-        Module pattern2 = new Module(Design.readCheckpoint("tile_p2.dcp"));
-        pattern2.setName("pattern2");
-        Module pattern3 = new Module(Design.readCheckpoint("tile_p3.dcp"));
-        pattern3.setName("pattern3");
-        Module pattern4 = new Module(Design.readCheckpoint("tile_p4.dcp"));
-        pattern4.setName("pattern4");
-
-        Module[] myModules = new Module[] {pattern1, pattern2, pattern3, pattern4};
-        Site[] myAnchors = new Site[myModules.length];
+        Module[] myModules = loadModules(patternDir, 4);
 
         for(int i = 0; i < myModules.length; i++) {
             Module myModule = myModules[i];
             design.addModule(myModule);
             design.getNetlist().migrateCellAndSubCells(myModule.getNetlist().getTopCell(), true);
-
-            System.out.println("Site of anchor of module " + myModule  + ":");
-            Site anchor = myModule.getAnchor().getSite();
-            System.out.println(anchor);
-            myAnchors[i] = anchor;
         }
 
         // Create and place instances of tile modules on user shell
         long startTime = System.nanoTime();        
 
         for(int i = 0; i < myModules.length; i++) {
-            String id = Integer.toString(i + 1);
+            String xName = Integer.toString(i + 1);
 
-            String[] tileInsts = new String[]{"tile1_" + id, "tile2_" + id, "tile3_" + id, "tile4_" + id};
+            String[] tileInsts = new String[]{"tile1_" + xName, "tile2_" + xName, "tile3_" + xName, "tile4_" + xName};
             int position = 90;//30; // 0
             for (String tileInstName : tileInsts) {
                 System.out.println("tileInst:"+tileInstName);
                 DesignTools.makeBlackBox(design, tileInstName);
-                ModuleInst mi = design.createModuleInst(tileInstName, myModules[i]);
-                if (!mi.place(myAnchors[i].getNeighborSite(0, position))) {
-                    throw new RuntimeException("ERROR: Failed to place module " + tileInstName);
+                final Module module = myModules[i];
+                ModuleInst mi = design.createModuleInst(tileInstName, module);
+                if (!mi.place(module.getAnchor().getSite().getNeighborSite(0, position))) {
+                    System.err.println("ERROR: Failed to place module " + tileInstName);
                 }
                 position = position - 30; // - 60
             }
 
         }
-        unrouteCrossArrayNets(design);
+        //unrouteCrossArrayNets(design);
+        //HandPlacer.openDesign(design);
 
 
         if (true) {
@@ -117,6 +127,39 @@ public class RWNL_mod_for_4x4 {
 
         design.writeCheckpoint("tiles_and_shell.dcp");
 
+    }
+
+    public static Module[] loadModules(Path patternDir) {
+        return loadModules(patternDir, -1);
+    }
+    public static Module[] loadModules(Path patternDir, int count) {
+        try (final Stream<Path> files = Files.list(patternDir)) {
+            final Module[] modules = files
+                    .filter(f -> {
+                        final String fn = f.getFileName().toString();
+                        return fn.startsWith("tile_p") && fn.endsWith(".dcp");
+                    })
+                    .sorted(Comparator.comparing(Object::toString))
+                    .map(f->new Pair<>(f, f.getFileName().toString().replaceAll("tile_p", "").replace(".dcp", "")))
+                    .filter(p->{
+                        String name = p.getSecond();
+                        int id = Integer.parseInt(name);
+                        return count < 0 || id <= count;
+                    })
+                    .map(p -> {
+                        final Module module = new Module(Design.readCheckpoint(p.getFirst()));
+                        module.setName(p.getSecond());
+                        return module;
+                    })
+                    .toArray(Module[]::new);
+            if (modules.length == 0) {
+                throw new RuntimeException("No modules found at "+patternDir);
+            }
+            System.out.println("Loaded "+modules.length+" modules");
+            return modules;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static void incCounter(Map<String, Integer> counters, String name) {

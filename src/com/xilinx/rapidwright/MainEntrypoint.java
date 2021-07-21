@@ -73,6 +73,7 @@ import com.xilinx.rapidwright.util.StringTools;
 import com.xilinx.rapidwright.util.Unzip;
 import com.xilinx.rapidwright.util.performance_evaluation.PerformanceEvaluation;
 import com.xilinx.rapidwright.verilogModules.VerilogStitcher;
+import com.xilinx.rapidwright.summer20.CreateArrayConstraints;
 
 public class MainEntrypoint {
     interface MainStyleFunction<E extends Throwable> {
@@ -156,6 +157,7 @@ public class MainEntrypoint {
         addFunction("UpdateRoutingUsingSATRouter", UpdateRoutingUsingSATRouter::main);
         addFunction("VerilogStitcher", VerilogStitcher::main);
         addFunction("PerfEvalTile", PerfEvalTile::main);
+	addFunction("CreateArrayConstraints", CreateArrayConstraints::main);
     }
 
     private static void listModes() {

@@ -27,6 +27,7 @@ import java.util.HashSet;
 import java.util.TreeSet;
 
 import com.trolltech.qt.core.QPointF;
+import com.trolltech.qt.core.QRect;
 import com.trolltech.qt.core.QRectF;
 import com.trolltech.qt.core.QSize;
 import com.trolltech.qt.core.QSizeF;
@@ -43,6 +44,7 @@ import com.trolltech.qt.gui.QPainter;
 import com.trolltech.qt.gui.QPen;
 import com.trolltech.qt.gui.QPixmap;
 import com.xilinx.rapidwright.design.Design;
+import com.xilinx.rapidwright.design.TileRectangle;
 import com.xilinx.rapidwright.device.Device;
 import com.xilinx.rapidwright.device.Tile;
 import com.xilinx.rapidwright.device.TileTypeEnum;
@@ -296,6 +298,8 @@ public class TileScene extends QGraphicsScene{
 						drawBRAM(painter, rectX, rectY, rectSide, offset, color);
 					}else if(Utils.isDSP(tileTypeEnum)){
 						drawDSP(painter, rectX, rectY, rectSide, offset, color);
+					}else if (Utils.isURAM(tileTypeEnum)){
+						drawURAM(painter, rectX, rectY, rectSide, offset, color);
 					}else{ // Just fill the tile in with a color
 						colorTile(painter, x, y, offset, color);
 					}
@@ -448,7 +452,8 @@ public class TileScene extends QGraphicsScene{
 	/*
 	 * Helper Drawing Methods
 	 */
-	
+
+
 	private void drawCLB(QPainter painter, int rectX, int rectY, int rectSide){
 		
 		switch(device.getSeries()){
@@ -461,36 +466,54 @@ public class TileScene extends QGraphicsScene{
 				painter.drawRect(rectX, rectY, rectSide, rectSide);
 		}
 	}
-	
+
+	private void drawMultiHighTile(QPainter painter, int rectX, int rectY, int rectSide, int offset, QColor color, int tileHeight, int sites) {
+
+		final int rectTop = rectY - (tileHeight - 1) * tileSize;
+		painter.drawRect(rectX, rectTop, rectSide - 1, tileHeight*tileSize - 2 * offset);
+		painter.setPen(color.darker());
+		int h = (tileHeight * tileSize - 3) / sites;
+		for (int i=0;i<sites;i++) {
+			int y = rectTop + h * i + 2;
+			painter.drawRect(rectX+2, y, rectSide - 5, h-2);
+		}
+		//painter.drawRect(rectX+2, rectY-4 * tileSize + 2, rectSide - 5, ((int)(2.5 * rectSide)) + 3 * 2 * offset - 5);
+		//painter.drawRect(rectX+2, (rectY-2 * tileSize) + 7, rectSide - 5, ((int)(2.5 * rectSide)) + 3 * 2 * offset - 5);
+	}
 	private void drawBRAM(QPainter painter, int rectX, int rectY, int rectSide, int offset, QColor color){
 		switch(device.getSeries()){
 			case Series7:
 			case UltraScale:
 			case UltraScalePlus:
-				painter.drawRect(rectX, rectY - 4 * tileSize, rectSide - 1, 5 * rectSide + 3 * 2 * offset - 1);
-				painter.setPen(color.darker());
-				painter.drawRect(rectX+2, rectY-4 * tileSize + 2, rectSide - 5, ((int)(2.5 * rectSide)) + 3 * 2 * offset - 5);
-				painter.drawRect(rectX+2, (rectY-2 * tileSize) + 7, rectSide - 5, ((int)(2.5 * rectSide)) + 3 * 2 * offset - 5);
+				drawMultiHighTile(painter, rectX, rectY, rectSide, offset, color, 5, 2);
 				break;
 			case Versal:
-				painter.drawRect(rectX, rectY - 3 * tileSize, rectSide - 1, 4 * rectSide + 3 * 2 * offset - 1);
-				painter.setPen(color.darker());
-				painter.drawRect(rectX+2, (rectY-3 * tileSize) + 2, rectSide - 5, ((int)(2 * rectSide)) + 3 * 2 * offset - 5);
-				painter.drawRect(rectX+2, (rectY-1 * tileSize) - 2, rectSide - 5, ((int)(2 * rectSide)) + 3 * 2 * offset - 5);
+				drawMultiHighTile(painter, rectX, rectY, rectSide, offset, color, 4, 2);
 				break;
 
 		}
 	}
-	
+
+	private void drawURAM(QPainter painter, int rectX, int rectY, int rectSide, int offset, QColor color){
+		switch(device.getSeries()) {
+			case Series7:
+			case UltraScale:
+			case UltraScalePlus:
+				drawMultiHighTile(painter, rectX, rectY, rectSide, offset, color, 15, 4);
+				break;
+			case Versal:
+				drawMultiHighTile(painter, rectX, rectY, rectSide, offset, color, 4, 1);
+				break;
+		}
+	}
+
 	private void drawDSP(QPainter painter, int rectX, int rectY, int rectSide, int offset, QColor color){
 		switch(device.getSeries()){
 			case Series7:
 			case UltraScale:
 			case UltraScalePlus:
-				painter.drawRect(rectX, rectY - 4 * tileSize, rectSide - 1, 5 * rectSide + 3 * 2 * offset - 1);
-				painter.setPen(color.darker());
-				painter.drawRect(rectX+2, rectY-4 * tileSize + 2, rectSide - 5, ((int)(2.5 * rectSide)) + 3 * 2 * offset - 5);
-				painter.drawRect(rectX+2, (rectY-2 * tileSize) + 7, rectSide - 5, ((int)(2.5 * rectSide)) + 3 * 2 * offset - 5);
+				drawMultiHighTile(painter, rectX, rectY, rectSide, offset, color, 5, 2);
+
 				break;
 			case Versal:
 				painter.drawRect(rectX, rectY - 1 * tileSize, rectSide - 1, 2 * rectSide + offset);
@@ -522,5 +545,15 @@ public class TileScene extends QGraphicsScene{
 				tileRowTypesToHide.add(TileTypeEnum.INT_RBRK);
 				break;
 		}
+	}
+
+
+	public QRect tileRectToQRect(TileRectangle rect) {
+		return new QRect(
+				rect.getMinColumn() * tileSize,
+				(rect.getMinRow()) * tileSize,
+				(rect.getWidth()+1) * tileSize,
+				(rect.getHeight()+1) * tileSize
+		);
 	}
 }

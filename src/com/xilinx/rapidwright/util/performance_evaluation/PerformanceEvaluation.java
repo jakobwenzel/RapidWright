@@ -133,7 +133,7 @@ public class PerformanceEvaluation {
         protected TimingResults getResults() {
             if (results ==null) {
                 try {
-                    results = TimingResults.parseTimingSummaryFile(getTimingSummaryReportPath(), clockPeriod);
+                    results = TimingResults.parseTimingSummaryFile(getTimingSummaryReportPath(), clockPeriod, getRoutedDcp());
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }

@@ -6,10 +6,12 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.xilinx.rapidwright.util.Pair;
 import com.xilinx.rapidwright.util.performance_evaluation.PerformanceEvaluation;
 import com.xilinx.rapidwright.util.performance_evaluation.TimingResults;
 
@@ -36,10 +38,10 @@ public class PerfEvalTile {
                         Files.write(jobConstraints, constraintsList);
 
                         try (PrintWriter pw = new PrintWriter(Files.newBufferedWriter(getScriptName()))) {
-                            pw.println("create_project -force tile_project -part xcu250-figd2104-2L-e");
-                            pw.println("read_checkpoint "+dcp);
-                            pw.println("link_design -top USS");
-                            //pw.println("open_checkpoint " + dcp);
+                            //pw.println("create_project -force tile_project -part xcu250-figd2104-2L-e");
+                            //pw.println("read_checkpoint "+dcp);
+                            //pw.println("link_design -top USS");
+                            pw.println("open_checkpoint " + dcp);
                             createClock(pw, "TS_clk_line");
                             pw.println("delete_pblocks -hier *");
                             //constraintsList.forEach(pw::println);
@@ -56,7 +58,7 @@ public class PerfEvalTile {
                     protected TimingResults getResults() {
                         if (results ==null) {
                             try {
-                                results = TimingResults.parseTimingSummaryFile(getTimingSummaryReportPath(), clockPeriod, "TS_clk_line");
+                                results = TimingResults.parseTimingSummaryFile(getTimingSummaryReportPath(), clockPeriod, getRoutedDcp(), "TS_clk_line");
                             } catch (IOException e) {
                                 throw new UncheckedIOException(e);
                             }
@@ -66,6 +68,10 @@ public class PerfEvalTile {
                 };
             }
         };
-        perfEval.run(434);
+        final Pair<TimingResults, TimingResults> result = perfEval.run(434);
+        final Path bestRunCheckpoint = result.getFirst().checkpoint;
+        final Path bestCheckpoint = workDir.resolve("best.dcp");
+        Files.copy(bestRunCheckpoint, bestCheckpoint, StandardCopyOption.REPLACE_EXISTING);
+        System.out.println("Copied best result to "+bestCheckpoint);
     }
 }

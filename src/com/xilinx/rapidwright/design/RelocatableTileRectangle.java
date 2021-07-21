@@ -71,6 +71,14 @@ public class RelocatableTileRectangle extends TileRectangle {
         );
     }
 
+    public static RelocatableTileRectangle of(Tile... tiles) {
+        final RelocatableTileRectangle result = new RelocatableTileRectangle();
+        for (Tile tile : tiles) {
+            result.extendTo(tile);
+        }
+        return result;
+    }
+
     @Override
     public String toString() {
         return "RelocatableTileRectangle{" +
@@ -103,9 +111,17 @@ public class RelocatableTileRectangle extends TileRectangle {
     private Tile[][] maxRowArr;
 
 
-    private String failedReloc(Tile template, Tile newAnchor, Tile originalAnchor) {
-        Module.getCorrespondingTile(template, newAnchor, originalAnchor, minColumnArr);
-        return "Failed to find corresponding tile for "+template+" when relocating from "+originalAnchor+" to "+newAnchor+". Rect: "+toString();
+    private String failedReloc(Tile template, Tile newAnchor, Tile originalAnchor, Tile[][] arr) {
+        //We try to find the name the new tile would have
+        int tileXOffset = template.getTileXCoordinate() - originalAnchor.getTileXCoordinate();
+        int tileYOffset = template.getTileYCoordinate() - originalAnchor.getTileYCoordinate();
+        int newTileX = newAnchor.getTileXCoordinate() + tileXOffset;
+        int newTileY = newAnchor.getTileYCoordinate() + tileYOffset;
+
+        String newName = template.getNameRoot()+"_X"+newTileX+"Y"+newTileY;
+
+
+        return "Failed to find corresponding tile \""+newName+"\" for "+template+" when relocating from "+originalAnchor+" to "+newAnchor+". Rect: "+ this;
     }
 
     //private Map<Tile, Map<Tile, RelocatableTileRectangle>> correspondings = new HashMap<>();
@@ -120,10 +136,10 @@ public class RelocatableTileRectangle extends TileRectangle {
         }
 
         return new RelocatableTileRectangle(
-                Objects.requireNonNull(Module.getCorrespondingTile(minColumn, newAnchor, originalAnchor, minColumnArr), ()->failedReloc(minColumn, newAnchor, originalAnchor)),
-                Objects.requireNonNull(Module.getCorrespondingTile(maxColumn, newAnchor, originalAnchor, maxColumnArr), ()->failedReloc(maxColumn, newAnchor, originalAnchor)),
-                Objects.requireNonNull(Module.getCorrespondingTile(minRow, newAnchor, originalAnchor, minRowArr), ()->failedReloc(minRow, newAnchor, originalAnchor)),
-                Objects.requireNonNull(Module.getCorrespondingTile(maxRow, newAnchor, originalAnchor, maxRowArr), ()->failedReloc(maxRow, newAnchor, originalAnchor))
+                Objects.requireNonNull(Module.getCorrespondingTile(minColumn, newAnchor, originalAnchor, minColumnArr), ()->failedReloc(minColumn, newAnchor, originalAnchor, minColumnArr)),
+                Objects.requireNonNull(Module.getCorrespondingTile(maxColumn, newAnchor, originalAnchor, maxColumnArr), ()->failedReloc(maxColumn, newAnchor, originalAnchor, maxColumnArr)),
+                Objects.requireNonNull(Module.getCorrespondingTile(minRow, newAnchor, originalAnchor, minRowArr), ()->failedReloc(minRow, newAnchor, originalAnchor, minRowArr)),
+                Objects.requireNonNull(Module.getCorrespondingTile(maxRow, newAnchor, originalAnchor, maxRowArr), ()->failedReloc(maxRow, newAnchor, originalAnchor, maxRowArr))
         );
    //             });
     }
@@ -149,7 +165,7 @@ public class RelocatableTileRectangle extends TileRectangle {
         if (otherMaxX.getColumn() > maxColumn.getColumn()) {
             maxColumn = otherMaxX;
         }
-        if (otherMinY.getRow() < minRow.getRow()) {
+        if (otherMinY.getRow()-otherMinY.getTrueTileHeight()+1 < getMinRow()) {
             minRow = otherMinY;
         }
         if (otherMaxY.getRow() > maxRow.getRow()) {
@@ -218,7 +234,7 @@ public class RelocatableTileRectangle extends TileRectangle {
 
     @Override
     public int getMinRow() {
-        return minRow.getRow();
+        return minRow.getRow() - minRow.getTrueTileHeight() + 1;
     }
 
     @Override

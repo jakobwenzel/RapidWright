@@ -28,6 +28,10 @@ public class AnalyzeConflictNets {
     public static void main(String[] args) {
         Design design = Design.readCheckpoint(args[0]);
 
+        analyzeOverlapping(design);
+    }
+
+    public static void analyzeOverlapping(Design design) {
         final Map<Node, List<Net>> overlaps = design.getNets().stream()
                 .flatMap(n -> getNetNodes(n).map(node -> new Pair<>(n, node)))
                 .collect(Collectors.groupingBy(Pair::getSecond, Collectors.mapping(Pair::getFirst, Collectors.toList())))
@@ -47,14 +51,17 @@ public class AnalyzeConflictNets {
         System.out.println(totalNets+" overlapped nets");
         System.out.println(overlaps.size()+" overlapped nodes");
 
-        final Map<Tile, Long> overlapsByTile = overlaps.keySet().stream().collect(Collectors.groupingBy(Node::getTile, Collectors.counting()));
-        // This line fixes slow performance under Linux
-        QApplication.setGraphicsSystem("raster");
-        QApplication.initialize(new String[]{});
-        final TileDataScene<Long> tileDataScene = new TileDataScene<>(design, overlapsByTile);
+        if (overlaps.size() > 0 ) {
+            final Map<Tile, Long> overlapsByTile = overlaps.keySet().stream().collect(Collectors.groupingBy(Node::getTile, Collectors.counting()));
 
-        //UiTools.saveAsPdf(tileDataScene, FileTools.replaceExtension(Paths.get(args[0]), ".pdf").toFile());
-        TileWindow.showBlocking(tileDataScene);
+            // This line fixes slow performance under Linux
+            QApplication.setGraphicsSystem("raster");
+            QApplication.initialize(new String[]{});
+            final TileDataScene<Long> tileDataScene = new TileDataScene<>(design, overlapsByTile);
+
+            //UiTools.saveAsPdf(tileDataScene, FileTools.replaceExtension(Paths.get(args[0]), ".pdf").toFile());
+            TileWindow.showBlocking(tileDataScene);
+        }
 
         final Map<Tile, Set<ModuleInst>> tileToModules = design.getSiteInsts().stream()
                 .collect(Collectors.groupingBy(
@@ -70,7 +77,7 @@ public class AnalyzeConflictNets {
         }));
 
         //HandPlacer.openDesign(design);
-        final Map<Integer, Set<String>> byColumn = design.getSiteInsts().stream()
+        /*final Map<Integer, Set<String>> byColumn = design.getSiteInsts().stream()
                 .filter(si->si.getModuleInst()!=null)
                 .collect(Collectors.groupingBy(si -> si.getTile().getColumn(),
                 Collectors.mapping(si -> si.getModuleInst().getName(), Collectors.toSet())));
@@ -87,7 +94,7 @@ public class AnalyzeConflictNets {
             .forEach(col-> {
                 final String nameRoot = String.join(", ", nameRoots.get(col));
                 System.out.println(col+": "+byColumn.get(col)+", "+nameRoot+", "+colCount.get(col));
-            });
+            });*/
     }
 
     private static String tileNameWithoutY(Tile tile) {

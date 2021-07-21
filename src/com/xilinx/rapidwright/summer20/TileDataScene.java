@@ -29,6 +29,7 @@ public class TileDataScene<T> extends TileScene {
         this.tileData = tileData;
     }
 
+
     @Override
     public void drawBackground(QPainter painter, QRectF rect) {
         super.drawBackground(painter, rect);
@@ -46,13 +47,15 @@ public class TileDataScene<T> extends TileScene {
             );
 
         });
-        final RelocatableTileRectangle collect = tileData.keySet().stream().collect(TileRectangle.collector());
-        painter.setPen(QColor.red);
-        painter.drawRect(
-                collect.getMinColumn() * tileSize,
-                (collect.getMinRow()) * tileSize,
-                (collect.getWidth()+1) * tileSize,
-                (collect.getHeight()+1) * tileSize
-                );
+        if (!tileData.isEmpty()) {
+            final RelocatableTileRectangle collect = tileData.keySet().stream().collect(TileRectangle.collector());
+            painter.setPen(QColor.red);
+            painter.drawRect(
+                    collect.getMinColumn() * tileSize,
+                    (collect.getMinRow()) * tileSize,
+                    (collect.getWidth() + 1) * tileSize,
+                    (collect.getHeight() + 1) * tileSize
+            );
+        }
     }
 }

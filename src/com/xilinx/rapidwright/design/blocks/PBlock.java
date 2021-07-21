@@ -25,6 +25,7 @@
 package com.xilinx.rapidwright.design.blocks;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -135,7 +136,7 @@ public class PBlock extends ArrayList<PBlockRange> {
 	 * @return The minimum rectangle pblock range for the provided sites
 	 * or null if unable to generate a correct range.
 	 */
-	public static PBlockRange createPBlockRange(Device dev, List<Site> sites){
+	public static PBlockRange createPBlockRange(Device dev, Collection<Site> sites){
 		if(sites == null || sites.isEmpty()) return null;
 		
 		int xMin = Integer.MAX_VALUE;

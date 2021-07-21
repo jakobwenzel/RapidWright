@@ -65,7 +65,7 @@ public class SimpleTileRectangle extends TileRectangle {
      */
     @Override
     public void extendTo(Tile tile) {
-        extendToRect(tile.getColumn(), tile.getColumn(), tile.getRow(), tile.getRow());
+        extendToRect(tile.getColumn(), tile.getColumn(), tile.getRow()-tile.getTrueTileHeight()+1, tile.getRow());
     }
 
     /**
@@ -119,5 +119,14 @@ public class SimpleTileRectangle extends TileRectangle {
     @Override
     public boolean isEmpty() {
         return empty;
+    }
+
+
+    public static SimpleTileRectangle of(Tile... tiles) {
+        final SimpleTileRectangle result = new SimpleTileRectangle();
+        for (Tile tile : tiles) {
+            result.extendTo(tile);
+        }
+        return result;
     }
 }

@@ -1,7 +1,10 @@
 package com.xilinx.rapidwright.design;
 
 import java.util.stream.Collector;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
+import com.xilinx.rapidwright.device.Device;
 import com.xilinx.rapidwright.device.Site;
 import com.xilinx.rapidwright.device.Tile;
 
@@ -91,5 +94,16 @@ public abstract class TileRectangle {
     public void extendToCorresponding(Tile tile, Site currentAnchor, SiteInst templateAnchor) {
         Tile corresponding = Module.getCorrespondingTile(tile, currentAnchor.getTile(), templateAnchor.getTile());
         extendTo(corresponding);
+    }
+
+    public Stream<Tile> streamTiles(Device device) {
+        if (isEmpty()) {
+            return Stream.empty();
+        }
+        return IntStream.rangeClosed(getMinColumn(), getMaxColumn())
+                .boxed()
+                .flatMap(column -> IntStream.rangeClosed(getMinRow(), getMaxRow())
+                        .mapToObj(row -> device.getTile(row, column)));
+
     }
 }

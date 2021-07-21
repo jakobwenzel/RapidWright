@@ -16,13 +16,15 @@ public class TimingResults {
     public final double totalNegSlack;
     public final boolean constraintsMet;
     public final double clockPeriod;
+    public final Path checkpoint;
 
-    public TimingResults(String constraintName, double worstSlack, double totalNegSlack, boolean constraintsMet, double clockPeriod) {
+    public TimingResults(String constraintName, double worstSlack, double totalNegSlack, boolean constraintsMet, double clockPeriod, Path checkpoint) {
         this.constraintName = constraintName;
         this.worstSlack = worstSlack;
         this.totalNegSlack = totalNegSlack;
         this.constraintsMet = constraintsMet;
         this.clockPeriod = clockPeriod;
+        this.checkpoint = checkpoint;
     }
 
     public double clockFrequency() {
@@ -40,19 +42,19 @@ public class TimingResults {
         InContent,
         After
     }
-    private static TimingResults parseContentLine(String line, boolean met, double clockPeriod) {
+    private static TimingResults parseContentLine(String line, boolean met, double clockPeriod, Path checkpoint) {
         String[] split = line.trim().split("\\s+");
         String worstHold = split[5];
-        final TimingResults timingResults = new TimingResults(split[0], Double.parseDouble(split[1]), Double.parseDouble(split[2]), met, clockPeriod);
+        final TimingResults timingResults = new TimingResults(split[0], Double.parseDouble(split[1]), Double.parseDouble(split[2]), met, clockPeriod, checkpoint);
         if (worstHold.contains("-")) {
             System.err.println("Design has worst hold violation of " + worstHold + "ns. Other results: " + timingResults+". Check if there is a clock routing issue.");
         }
         return timingResults;
     }
-    public static TimingResults parseTimingSummaryFile(Path file, double clockPeriod) throws IOException {
-        return parseTimingSummaryFile(file, clockPeriod, null);
+    public static TimingResults parseTimingSummaryFile(Path file, double clockPeriod, Path checkpoint) throws IOException {
+        return parseTimingSummaryFile(file, clockPeriod, checkpoint,null);
     }
-    public static TimingResults parseTimingSummaryFile(Path file, double clockPeriod, String constraintName) throws IOException {
+    public static TimingResults parseTimingSummaryFile(Path file, double clockPeriod, Path checkpoint, String constraintName) throws IOException {
         ParseState ps = ParseState.BeforeMetLine;
 
         List<String> contentLine = new ArrayList<>();
@@ -96,7 +98,7 @@ public class TimingResults {
         }
         try {
             boolean finalMet = met;
-            final Map<String, TimingResults> resultsByConstraint = contentLine.stream().map(s -> parseContentLine(s, finalMet, clockPeriod))
+            final Map<String, TimingResults> resultsByConstraint = contentLine.stream().map(s -> parseContentLine(s, finalMet, clockPeriod, checkpoint))
                     .collect(Collectors.toMap(l -> l.constraintName, Function.identity()));
             if (constraintName == null) {
                 if (resultsByConstraint.size() != 1) {
