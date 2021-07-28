@@ -30,6 +30,9 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.io.UncheckedIOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -37,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 
 import com.xilinx.rapidwright.design.Design;
 import com.xilinx.rapidwright.design.Module;
@@ -64,8 +68,6 @@ import com.xilinx.rapidwright.util.Utils;
  * Created on: Aug 14, 2015
  */
 public class BlockCreator {
-
-	public static final String BLOCK_CACHE_PATH = "/home/"+System.getenv("USER")+"/blockCache";
 
 	public static final String ROUTED_XPN_SUFFIX = "_routed.xpn";
 	
@@ -118,12 +120,17 @@ public class BlockCreator {
 			
 			// Store PBlock with Module Here
 			String guidedPblockFile = dcpName.replace("_routed.dcp", USED_PBLOCK_FILE_SUFFIX);
-			List<String> lines = FileTools.getLinesFromTextFile(guidedPblockFile);
-			if(lines == null || lines.size() == 0){
-				throw new RuntimeException("ERROR: Problem reading pblock from guided block file " + guidedPblockFile);
+			try {
+				List<String> lines = FileTools.getLinesFromTextFile(guidedPblockFile);
+				if (lines == null || lines.size() == 0) {
+					throw new RuntimeException("ERROR: Problem reading pblock from guided block file " + guidedPblockFile);
+				}
+				String pblockString = lines.get(0).trim();
+				if (pblockString.length() > 0 && !pblockString.contains("Failed!")) m.setPBlock(pblockString);
+			} catch (UncheckedIOException err) {
+				//No constraints, ignore
+				m.setPBlock("");
 			}
-			String pblockString = lines.get(0).trim(); 
-			if(pblockString.length() > 0 && !pblockString.contains("Failed!")) m.setPBlock(pblockString);
 		}
 		return modImpls;
 	}
@@ -161,14 +168,10 @@ public class BlockCreator {
 			} while (numRead != -1);
 
 			fis.close();
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-			System.exit(1);
 		} catch (IOException e) {
-			e.printStackTrace();
-			System.exit(1);
+			throw new UncheckedIOException(e);
 		} catch (NoSuchAlgorithmException e) {
-			e.printStackTrace();
+			throw new RuntimeException(e);
 		}
 		return complete.digest();
 	}
@@ -203,16 +206,19 @@ public class BlockCreator {
 
 	}
 	
-	public static void implementBlocks(HashMap<String,String> ipNames, String cacheDir, ImplGuide implHelper, Device dev){
+	public static void implementBlocks(Map<String,IPCore> ipNames, String cacheDir, ImplGuide implHelper, Device dev){
 		JobQueue jobs = new JobQueue();
 		Map<Long,String> jobLocations = new HashMap<>();
 		
-		for(Entry<String,String> e : ipNames.entrySet()){
+		for(Entry<String, IPCore> e : ipNames.entrySet()){
 			String blockName = e.getKey();
-			String cacheID = e.getValue();
+			IPCore core = e.getValue();
+			String cacheID = core.getHash();
 
-			File cachedIPDir = new File(cacheDir + File.separator + cacheID);
-			if(cachedIPDir.list() == null || cachedIPDir.list().length == 0){
+			Path cachedIPDir = Paths.get(cacheDir).resolve(core.getHash());
+
+			String[] list = cachedIPDir.toFile().list();
+			if(list == null || list.length == 0){
 				throw new RuntimeException("ERROR: Cached entry " + cachedIPDir + " for ip " + blockName +" is empty!");
 			}
 			
@@ -220,7 +226,7 @@ public class BlockCreator {
 			String doneFileName = null;
 			String optDcpFileName = null;
 			int implCount = -1;
-			for(String fileName : cachedIPDir.list()){
+			for(String fileName : list){
 				if(fileName.startsWith(DONE_FILE_PREFIX)){
 					doneFileName = fileName;
 					implCount = Integer.parseInt(doneFileName.substring(doneFileName.lastIndexOf('.')+1));
@@ -229,7 +235,7 @@ public class BlockCreator {
 				}
 			}
 			if(optDcpFileName == null){
-				throw new RuntimeException("ERROR: Expected an _opt.dcp file in " + cachedIPDir.getAbsolutePath());
+				throw new RuntimeException("ERROR: Expected an _opt.dcp file in " + cachedIPDir.toAbsolutePath());
 			}
 			
 			if(doneFileName != null) {
@@ -266,14 +272,22 @@ public class BlockCreator {
 				// Create a run for each implementation of each module in pblock file
 				String pblockFileName = optDcpFileName.replace("_opt.dcp", "_pblock.txt");
 				if(new File(pblockFileName).exists()){
-					for(String pblock : FileTools.getLinesFromTextFile(pblockFileName)){
+					ArrayList<String> pBlockLines = FileTools.getLinesFromTextFile(pblockFileName);
+					if (pBlockLines.get(0).startsWith("PBlockGenerator Failed!")) {
+						throw new RuntimeException(String.join("\n", pBlockLines) +"\n for "+pblockFileName);
+					}
+					for(String pblock : pBlockLines){
 						if(pblock.startsWith("#")) continue;
-						PBlock pblock2 = (pblock.trim().isEmpty() || pblock.contains("Failed!")) ? null : new PBlock(dev, pblock);
-						FileTools.writeStringToTextFile(pblock, optDcpFileName.replace("opt.dcp", +implIndex + USED_PBLOCK_FILE_SUFFIX));
-						Job job = createImplRun(optDcpFileName, pblock2, implIndex, null);
-						jobs.addJob(job);
-						jobLocations.put(job.getJobNumber(), optDcpFileName + " " + implIndex);
-						implIndex++;
+						try {
+							PBlock pblock2 = (pblock.trim().isEmpty() || pblock.contains("Failed!")) ? null : new PBlock(dev, pblock);
+							FileTools.writeStringToTextFile(pblock, optDcpFileName.replace("opt.dcp", +implIndex + USED_PBLOCK_FILE_SUFFIX));
+							Job job = createImplRun(optDcpFileName, pblock2, implIndex, null);
+							jobs.addJob(job);
+							jobLocations.put(job.getJobNumber(), optDcpFileName + " " + implIndex);
+							implIndex++;
+						} catch (RuntimeException err) {
+							throw new RuntimeException("failed parsing "+pblockFileName,err);
+						}
 					}					
 				}
 				else if(new File(optDcpFileName.replace("_opt.dcp", "_utilization.report")).exists()){
@@ -281,6 +295,8 @@ public class BlockCreator {
 					jobs.addJob(job);
 					jobLocations.put(job.getJobNumber(), optDcpFileName + " " + implIndex);
 					implIndex++;					
+				} else {
+					throw new RuntimeException("Cannot implement block "+cacheID+": No utilization report found");
 				}
 			}
 			BlockGuide bg = implHelper == null ? null : implHelper.getBlock(cacheID);
@@ -366,7 +382,19 @@ public class BlockCreator {
 		}
 		FileTools.writeLinesToTextFile(doneFileContents, fileName);
 	}
-	
+
+	public static void printCheckForRapidWrightTcl(PrintWriter pw) {
+		pw.println("if { [info procs rapid_compile_ipi] == \"\" } {");
+		pw.println("	if {[info exists env(RAPIDWRIGHT_PATH)]} {");
+		pw.println("		set rw_path $::env(RAPIDWRIGHT_PATH)");
+		pw.println("		source ${rw_path}/tcl/rapidwright.tcl");
+		pw.println("	} else {");
+		pw.println("		error \"Please set the environment variable RAPIDWRIGHT_PATH to point to your RapidWright installation.\"");
+		pw.println("	}");
+		pw.println("}");
+		pw.println("puts \"RAPIDWRIGHT_PATH=$::env(RAPIDWRIGHT_PATH)\"");
+	}
+
 	private static void createTclScript(String scriptName, String optDcpFileName, PBlock pblock, int implIndex, BlockGuide blockGuide){
 		PrintWriter pw = null;
 		try {
@@ -378,17 +406,9 @@ public class BlockCreator {
 		if(FileTools.isWindows()){
 			optDcpFileName = optDcpFileName.replace("\\", "/");
 		}
-		
-		pw.println("if { [info procs rapid_compile_ipi] == \"\" } {");
-		pw.println("	if {[info exists env(RAPIDWRIGHT_PATH)]} {");
-		pw.println("		set rw_path $::env(RAPIDWRIGHT_PATH)");
-		pw.println("		source ${rw_path}/tcl/rapidwright.tcl");
-		pw.println("	} else {");
-		pw.println("		error \"Please set the environment variable RAPIDWRIGHT_PATH to point to your RapidWright installation.\"");
-		pw.println("	}");
-		pw.println("}");
-		pw.println("puts \"RAPIDWRIGHT_PATH=$::env(RAPIDWRIGHT_PATH)\"");
-		
+
+		printCheckForRapidWrightTcl(pw);
+
 		
 		pw.println("open_checkpoint " + optDcpFileName);
 		if(blockGuide != null){
@@ -481,6 +501,9 @@ public class BlockCreator {
 	 * @return The module corresponding 
 	 */
 	public static ModuleImpls createOrRetrieveBlock(String edifFileName, String routedDCPFileName, String cellInstanceName, String xciFileName, int blockImplCount){
+		Objects.requireNonNull(edifFileName);
+		Objects.requireNonNull(cellInstanceName);
+		Objects.requireNonNull(xciFileName);
 		String uniqueFileName = getUniqueFileName(xciFileName);
 		String cacheID = xciFileName.replace(".xci", "");
 		cacheID = cacheID.substring(cacheID.lastIndexOf('/')+1, cacheID.length());

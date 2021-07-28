@@ -63,13 +63,13 @@ import com.xilinx.rapidwright.util.BrowseDevice;
 import com.xilinx.rapidwright.util.CompareRouteStatusReports;
 import com.xilinx.rapidwright.util.DesignImplementationDiff;
 import com.xilinx.rapidwright.util.FileTools;
-import com.xilinx.rapidwright.util.Installer;
 import com.xilinx.rapidwright.util.JobQueue;
 import com.xilinx.rapidwright.util.PartPrinter;
 import com.xilinx.rapidwright.util.PerformanceExplorer;
 import com.xilinx.rapidwright.util.RapidWright;
 import com.xilinx.rapidwright.util.StringTools;
 import com.xilinx.rapidwright.util.Unzip;
+import com.xilinx.rapidwright.verilogModules.VerilogStitcher;
 
 public class MainEntrypoint {
     interface MainStyleFunction<E extends Throwable> {
@@ -149,6 +149,7 @@ public class MainEntrypoint {
         addFunction("TileColumnPattern", TileColumnPattern::main);
         addFunction("Unzip", Unzip::main);
         addFunction("UpdateRoutingUsingSATRouter", UpdateRoutingUsingSATRouter::main);
+        addFunction("VerilogStitcher", VerilogStitcher::main);
     }
 
     private static void listModes() {

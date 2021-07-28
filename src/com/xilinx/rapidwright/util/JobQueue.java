@@ -217,7 +217,4 @@ public class JobQueue {
 		else System.err.println("One or more runs failed");
 	}
 
-	public int getCount() {
-		return waitingToRun.size() + running.size() + finished.size();
-	}
 }

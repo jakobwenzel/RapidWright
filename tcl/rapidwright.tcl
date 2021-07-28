@@ -36,29 +36,10 @@ proc compileBlock  { dcpFile ip_nr_instances} {
     set blockImplCount [compile_block_dcp $dcpFile $ip_nr_instances]
 }
 
-proc compile_block_dcp  { dcpFile  ip_nr_instances} {
-    set rootDcpFileName [string map {".dcp" ""} $dcpFile]
-    
-    puts "Loading $dcpFile";
-
-    open_checkpoint $dcpFile
+proc compile_openened_block_dcp { dcpFile ip_nr_instances} {
 
     add_debug_hub_ports_on_ILAs
 
-# Work around to get clock constraints loaded
-    set unzipDir .unzip_${dcpFile}
-    file mkdir ${unzipDir}
-    set rwpath ${::env(RAPIDWRIGHT_PATH)}
-    set cpath ${::env(CLASSPATH)}
-    puts "RAPIDWRIGHT_PATH=$rwpath"
-    puts "CLASSPATH=$cpath"
-    exec java com.xilinx.rapidwright.util.Unzip ${dcpFile} ${unzipDir}
-    # Avoid naming problems caused by the fact that the files copied into IP_CACHE have different names as the ones expected by RW. Error appears only in designs with multiple IPs with the same ID
-	set file_name_xdc [glob -directory ${unzipDir} *_in_context.xdc]
-    read_xdc $file_name_xdc
-    file delete -force ${unzipDir}
-# END Work around
-    
     opt_design
 
     set optDcpFile [string map {".dcp" "_opt.dcp"} $dcpFile]
@@ -69,7 +50,7 @@ proc compile_block_dcp  { dcpFile  ip_nr_instances} {
 
     set urptName [string map {".dcp" "_utilization.report"} $dcpFile]
     report_utilization -packthru -file $urptName
-    
+
     # Only generate a pblock for designs with actual logic (concat won't have any)
     set cells [get_cells]
     if { $cells != {} } {
@@ -79,7 +60,7 @@ proc compile_block_dcp  { dcpFile  ip_nr_instances} {
         place_design -directive Quick
         set_param place.debugShape ""
         place_design -unplace
-        
+
     # Generate constraint
     if {[info exists ::env(GLOBAL_PBLOCK)]} {
         set global_pblock_file ${::env(GLOBAL_PBLOCK)}
@@ -102,6 +83,32 @@ proc compile_block_dcp  { dcpFile  ip_nr_instances} {
 
     write_edif -force [string map {".dcp" "_routed.edf"} $dcpFile]
     puts "SUCCESSFUL_COMPLETION OF ${dcpFile}"
+}
+
+proc compile_block_dcp  { dcpFile  ip_nr_instances} {
+    set rootDcpFileName [string map {".dcp" ""} $dcpFile]
+    
+    puts "Loading $dcpFile";
+
+    open_checkpoint $dcpFile
+
+
+# Work around to get clock constraints loaded
+    set unzipDir .unzip_${dcpFile}
+    file mkdir ${unzipDir}
+    set rwpath ${::env(RAPIDWRIGHT_PATH)}
+    set cpath ${::env(CLASSPATH)}
+    puts "RAPIDWRIGHT_PATH=$rwpath"
+    puts "CLASSPATH=$cpath"
+    exec java com.xilinx.rapidwright.util.Unzip ${dcpFile} ${unzipDir}
+    # Avoid naming problems caused by the fact that the files copied into IP_CACHE have different names as the ones expected by RW. Error appears only in designs with multiple IPs with the same ID
+	set file_name_xdc [glob -directory ${unzipDir} *_in_context.xdc]
+    read_xdc $file_name_xdc
+    file delete -force ${unzipDir}
+# END Work around
+
+    compile_opened_block_dcp $dcpFile $ip_nr_instances
+
 }
 
 proc update_routed_dcp { dcpFile implIndex } {
