@@ -71,6 +71,7 @@ public class CheckOpenFilesExtension implements BeforeTestExecutionCallback, Aft
                             final Path linkTarget = Files.readSymbolicLink(p);
                             return linkTarget.toString();
                         } catch (IOException e) {
+                            e.printStackTrace();
                             return p.toString();
                         }})
                     .filter(this::checkIgnore)

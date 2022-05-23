@@ -23,20 +23,17 @@
 
 package com.xilinx.rapidwright.edif;
 
-import java.util.HashSet;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
-
-import java.nio.charset.StandardCharsets;
-
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
 
 import com.xilinx.rapidwright.design.Design;
 import com.xilinx.rapidwright.device.Device;
+import com.xilinx.rapidwright.support.LargeTest;
 import com.xilinx.rapidwright.support.RapidWrightDCP;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TestEDIFTools {
 
@@ -118,6 +115,7 @@ public class TestEDIFTools {
     }
     
     @Test
+    @LargeTest(max_memory_gb = 7)
     public void testUniqueifyNetlist() {
         final EDIFNetlist netlist = EDIFTools.createNewNetlist("test");
         Design design = new Design("test", Device.PYNQ_Z1);
