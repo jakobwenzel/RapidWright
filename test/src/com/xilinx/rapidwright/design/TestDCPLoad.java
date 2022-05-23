@@ -34,6 +34,7 @@ import com.xilinx.rapidwright.support.RapidWrightDCP;
 import com.xilinx.rapidwright.tests.CodePerfTracker;
 import com.xilinx.rapidwright.util.FileTools;
 import com.xilinx.rapidwright.util.Installer;
+import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -95,29 +96,34 @@ public class TestDCPLoad {
     
     @Test
     public void checkAutoEDIFGenerationWithVivado(@TempDir Path tempDir) throws IOException {
-        // This test won't run in CI as Vivado is not available
-        Assumptions.assumeTrue(FileTools.isVivadoOnPath());
-        
-        Path dcpPath = RapidWrightDCP.getPath("picoblaze_ooc_X10Y235.dcp");
-        final Path dcpCopy = tempDir.resolve(dcpPath.getFileName());
-        Files.copy(dcpPath, dcpCopy);
+        try {
+            // This test won't run in CI as Vivado is not available
+            Assumptions.assumeTrue(FileTools.isVivadoOnPath());
 
-        Path binEdfFile = tempDir.resolve(FileTools.replaceExtension(dcpPath.getFileName(), ".edf"));
-        createSimulatedBinaryEDIF(binEdfFile, FileTools.BINARY_CHECK_LENGTH+1); 
-        Assertions.assertTrue(Design.replaceEDIFinDCP(dcpCopy.toString(), binEdfFile.toString()));
-        FileTools.deleteFile(binEdfFile.toString());
-        Path readableEDIFDir = DesignTools.getDefaultReadableEDIFDir(dcpCopy);
-        Path readableEDIF = DesignTools.getEDFAutoGenFilePath(dcpCopy, readableEDIFDir);
+            Path dcpPath = RapidWrightDCP.getPath("picoblaze_ooc_X10Y235.dcp");
+            final Path dcpCopy = tempDir.resolve(dcpPath.getFileName());
+            Files.copy(dcpPath, dcpCopy);
 
-        // Modify DCP with a different binary EDIF
-        createSimulatedBinaryEDIF(binEdfFile, FileTools.BINARY_CHECK_LENGTH+2); 
-        Assertions.assertTrue(Design.replaceEDIFinDCP(dcpCopy.toString(), binEdfFile.toString()));
-        FileTools.deleteFile(binEdfFile.toString());
-        FileTools.deleteFile(readableEDIF.toString());
-        Design.setAutoGenerateReadableEdif(true);
-        Design.readCheckpoint(dcpCopy, CodePerfTracker.SILENT);
-        Assertions.assertTrue(Files.getLastModifiedTime(readableEDIF).toMillis() >
-        Files.getLastModifiedTime(dcpPath).toMillis());
+            Path binEdfFile = tempDir.resolve(FileTools.replaceExtension(dcpPath.getFileName(), ".edf"));
+            createSimulatedBinaryEDIF(binEdfFile, FileTools.BINARY_CHECK_LENGTH + 1);
+            Assertions.assertTrue(Design.replaceEDIFinDCP(dcpCopy.toString(), binEdfFile.toString()));
+            FileTools.deleteFile(binEdfFile.toString());
+            Path readableEDIFDir = DesignTools.getDefaultReadableEDIFDir(dcpCopy);
+            Path readableEDIF = DesignTools.getEDFAutoGenFilePath(dcpCopy, readableEDIFDir);
+
+            // Modify DCP with a different binary EDIF
+            createSimulatedBinaryEDIF(binEdfFile, FileTools.BINARY_CHECK_LENGTH + 2);
+            Assertions.assertTrue(Design.replaceEDIFinDCP(dcpCopy.toString(), binEdfFile.toString()));
+            FileTools.deleteFile(binEdfFile.toString());
+            FileTools.deleteFile(readableEDIF.toString());
+            Design.setAutoGenerateReadableEdif(true);
+            Design.readCheckpoint(dcpCopy, CodePerfTracker.SILENT);
+            Assertions.assertTrue(Files.getLastModifiedTime(readableEDIF).toMillis() >
+                    Files.getLastModifiedTime(dcpPath).toMillis());
+        } catch (RuntimeException e) {
+            double space = FileUtils.sizeOfDirectory(tempDir.toFile())/1024.0/1024;
+            throw new RuntimeException("Crashed after using "+space+"mb", e);
+        }
     }
 
     @ParameterizedTest
