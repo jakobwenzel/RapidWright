@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import com.xilinx.rapidwright.edif.EDIFTools;
 import com.xilinx.rapidwright.support.RapidWrightDCP;
@@ -95,10 +96,13 @@ public class TestDCPLoad {
     }
     
     @Test
-    public void checkAutoEDIFGenerationWithVivado(@TempDir Path tempDir) throws IOException {
-        try {
+    public void checkAutoEDIFGenerationWithVivado() throws IOException {
             // This test won't run in CI as Vivado is not available
             Assumptions.assumeTrue(FileTools.isVivadoOnPath());
+        Path tempDir = Paths.get(FileTools.getRapidWrightPath() + "/build/tempAutoEDIFGeneration");
+        Files.createDirectories(tempDir);
+        System.out.println("running in "+tempDir);
+        try {
 
             Path dcpPath = RapidWrightDCP.getPath("picoblaze_ooc_X10Y235.dcp");
             final Path dcpCopy = tempDir.resolve(dcpPath.getFileName());
