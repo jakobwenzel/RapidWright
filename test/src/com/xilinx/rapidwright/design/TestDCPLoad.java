@@ -100,6 +100,9 @@ public class TestDCPLoad {
             // This test won't run in CI as Vivado is not available
             Assumptions.assumeTrue(FileTools.isVivadoOnPath());
         Path tempDir = Paths.get(FileTools.getRapidWrightPath() + "/build/tempAutoEDIFGeneration");
+        if (Files.exists(tempDir)) {
+            FileUtils.deleteDirectory(tempDir.toFile());
+        }
         Files.createDirectories(tempDir);
         System.out.println("running in "+tempDir);
         System.getenv().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).forEach(e-> System.out.println(e.getKey()+"="+e.getValue()));
