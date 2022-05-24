@@ -102,6 +102,7 @@ public class TestDCPLoad {
         Path tempDir = Paths.get(FileTools.getRapidWrightPath() + "/build/tempAutoEDIFGeneration");
         Files.createDirectories(tempDir);
         System.out.println("running in "+tempDir);
+        System.getenv().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).forEach(e-> System.out.println(e.getKey()+"="+e.getValue()));
         try {
 
             Path dcpPath = RapidWrightDCP.getPath("picoblaze_ooc_X10Y235.dcp");
