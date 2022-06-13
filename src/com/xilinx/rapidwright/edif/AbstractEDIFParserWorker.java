@@ -336,19 +336,20 @@ public abstract class AbstractEDIFParserWorker {
         return net;
     }
 
-    protected abstract void linkEdifPortInstToCellInst(EDIFCell parentCell, EDIFPortInst portInst, EDIFNet net);
+    protected abstract void linkEdifPortInstToCellInst(EDIFCell parentCell, EDIFPortInst portInst, String portName, EDIFNet net);
 
     private void parseEDIFPortInst(EDIFCell parentCell, Map<String, EDIFCellInst> instanceLookup, EDIFNet net){
         expect(PORTREF, getNextToken(true));
-        String currToken = getNextToken(false);
+        String currToken = getNextToken(true);
         EDIFPortInst portInst = new EDIFPortInst();
+        String portName;
         if(currToken.equals(LEFT_PAREN)){
             expect(MEMBER, getNextToken(true));
-            portInst.setName(getNextToken(false));
+            portName = getNextToken(true);
             portInst.setIndex(Integer.parseInt(getNextToken(true)));
             expect(RIGHT_PAREN, getNextToken(true));
         }else{
-            portInst.setName(currToken);
+            portName = currToken;
         }
 
         currToken = getNextToken(true);
@@ -364,7 +365,7 @@ public abstract class AbstractEDIFParserWorker {
             expect(RIGHT_PAREN,currToken);
         }
 
-        linkEdifPortInstToCellInst(parentCell, portInst, net);
+        linkEdifPortInstToCellInst(parentCell, portInst, portName, net);
     }
 
     /**
@@ -482,17 +483,15 @@ public abstract class AbstractEDIFParserWorker {
         return portCell;
     }
 
-    protected void doLinkPortInstToCellInst(EDIFCell parentCell, EDIFPortInst portInst, EDIFNet net) {
+    protected void doLinkPortInstToCellInst(EDIFCell parentCell, EDIFPortInst portInst, String portName, EDIFNet net) {
         EDIFCell portCell = lookupPortCell(parentCell, portInst);
-        EDIFPort port = portCell.getPortByLegalName(portInst.getName());
+        EDIFPort port = portCell.getPortByLegalName(portName);
 
         if(port == null) {
             throw new EDIFParseException("ERROR: Couldn't find EDIFPort for "
                     + "EDIFPortInst " + portInst.getName());
         }
         portInst.setPort(port);
-        String portInstName = portInst.getPortInstNameFromPort();
-        portInst.setName(portInstName);
         if(portInst.getCellInst() != null) {
             portInst.getCellInst().addPortInst(portInst);
         }

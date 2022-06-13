@@ -33,8 +33,6 @@ import java.io.Writer;
  * Created on: May 11, 2017
  */
 public class EDIFPortInst {
-
-	private String name;
 	
 	private EDIFPort port;
 	
@@ -53,7 +51,6 @@ public class EDIFPortInst {
 	 * @param portInst
 	 */
 	public EDIFPortInst(EDIFPortInst portInst) {
-		this.name = portInst.name;
 		this.port = null;
 		this.parentNet = null;
 		this.index = portInst.index;
@@ -101,7 +98,6 @@ public class EDIFPortInst {
 		}
 		this.index = index;
 		this.port = port;
-		this.name = getPortInstNameFromPort();
 		setCellInst(cellInst);
 		if(parentNet != null) parentNet.addPortInst(this);
 	}
@@ -113,15 +109,12 @@ public class EDIFPortInst {
 	public String getPortInstNameFromPort(){
 		return port.getPortInstNameFromPort(index);
 	}
-	
+
+	@Deprecated
 	public String getName(){
-		return name;
+		return getPortInstNameFromPort();
 	}
-	
-	protected void setName(String name){
-		this.name = name;
-	}
-	
+
 	/**
 	 * @return the index
 	 */
@@ -258,7 +251,6 @@ public class EDIFPortInst {
 		int result = 1;
 		result = prime * result + ((cellInst == null) ? 0 : cellInst.hashCode());
 		result = prime * result + index;
-		result = prime * result + ((name == null) ? 0 : name.hashCode());
 		return result;
 	}
 
@@ -281,16 +273,11 @@ public class EDIFPortInst {
 			return false;
 		if (index != other.index)
 			return false;
-		if (name == null) {
-			if (other.name != null)
-				return false;
-		} else if (!name.equals(other.name))
-			return false;
 		return true;
 	}
 
 	public String toString(){
-		if(cellInst == null) return name;
-		return cellInst.getName() + EDIFTools.EDIF_HIER_SEP + name;
+		if(cellInst == null) return getPortInstNameFromPort();
+		return cellInst.getName() + EDIFTools.EDIF_HIER_SEP + getPortInstNameFromPort();
 	}
 }

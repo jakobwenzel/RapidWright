@@ -210,6 +210,7 @@ public class EDIFNet extends EDIFPropertyObject {
 	 * @param portInstName Name of the port instance ({@link EDIFPortInst#getName()} to get
 	 * @return The port instance connected to this net, or null if none exists.
 	 */
+	@Deprecated
 	public EDIFPortInst getPortInst(EDIFCellInst inst, String portInstName){
 	    if (portInsts == null) return null;
 	    return portInsts.get(inst, portInstName);
@@ -251,7 +252,12 @@ public class EDIFNet extends EDIFPropertyObject {
 	 * @return The port instance object that was removed or null if no changes were made.
 	 */
 	public EDIFPortInst removePortInst(EDIFPortInst portInst){
-		return removePortInst(portInst.getCellInst(), portInst.getName()); 
+		return removePortInst(portInst.getCellInst(), portInst.getPort().getName(), portInst.getIndex());
+	}
+
+	private EDIFPortInst removePortInst(EDIFCellInst cellInst, String portInstName) {
+		int index = portInstName.endsWith("]") ? EDIFTools.getPortIndexFromName(portInstName) : -1;
+		return removePortInst(cellInst, EDIFTools.getRootBusName(portInstName), index);
 	}
 	
 	/**
@@ -280,13 +286,13 @@ public class EDIFNet extends EDIFPropertyObject {
 	 * @param portInstName Name of the port instance ({@link EDIFPortInst#getName()} to remove
 	 * @return The port instance object that was removed or null if no changes were made.
 	 */
-	public EDIFPortInst removePortInst(EDIFCellInst inst, String portInstName){
+	public EDIFPortInst removePortInst(EDIFCellInst inst, String portName, int portIndex){
         if (portInsts == null) return null;
         if(parentCell != null) {
             // This does not explicitly track the port instance index, in most cases the name should be sufficient.
-            trackChanges(EDIFChangeType.PORT_INST_REMOVE, inst, portInstName);
+            trackChanges(EDIFChangeType.PORT_INST_REMOVE, inst, portName+"["+portIndex+"]");
         }
-        EDIFPortInst tmp = portInsts.remove(inst, portInstName);
+        EDIFPortInst tmp = portInsts.remove(inst, portName, portIndex);
 		if(tmp != null) tmp.setParentNet(null);
 		return tmp;
 	}

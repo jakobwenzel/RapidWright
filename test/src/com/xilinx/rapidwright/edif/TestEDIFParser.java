@@ -32,8 +32,12 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import com.google.protobuf.Message;
+import com.xilinx.rapidwright.design.Design;
+import com.xilinx.rapidwright.device.Device;
 import com.xilinx.rapidwright.support.RapidWrightDCP;
 import com.xilinx.rapidwright.tests.CodePerfTracker;
+import com.xilinx.rapidwright.util.MessageGenerator;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -111,11 +115,62 @@ public class TestEDIFParser {
                 .mapToObj(TestEDIFParser::makeArgs);
     }
 
-    @Test
-    public void loadEDIFSingleThreaded() throws IOException {
-        try (EDIFParser parser = new EDIFParser(input)) {
-            parser.parseEDIFNetlist();
-        }
+    private static EDIFNetlist load() {
 
+        return EDIFTools.readEdifFile(RapidWrightDCP.getPath("top.edf"));
+    }
+
+
+    public static void main(String[] args) {
+        System.gc();
+
+        CodePerfTracker tracker = new CodePerfTracker("lalala");
+        tracker.useGCToTrackMemory(true);
+        gc();
+        tracker.start("load edif");
+        //List<String> keep = new ArrayList<>();
+        {
+            EDIFNetlist edifNetlist = load();
+            Device.releaseDeviceReferences();
+            gc();
+            tracker.stop().start("set name to null");
+            loop(edifNetlist);
+            gc();
+            tracker.stop().start("free netlist");
+            System.out.println(edifNetlist.getName());
+            edifNetlist = null;
+        }
+        gc();
+        tracker.stop();
+        MessageGenerator.waitOnAnyKey();
+        tracker.printSummary();
+
+    }
+
+    private static void loop(EDIFNetlist edifNetlist) {
+        int count =0;
+        for (EDIFLibrary library : edifNetlist.getLibraries()) {
+            for (EDIFCell cell : library.getCells()) {
+                for (EDIFNet net : cell.getNets()) {
+                    for (EDIFPortInst portInst : net.getPortInsts()) {
+                        count++;
+                    }
+                }
+            }
+        }
+        System.out.println("count = " + count);
+        System.out.println("count = " + count*8.0/1024/1024);
+    }
+
+    private static void gc() {
+        for (int i = 0; i < 10; i++) {
+
+            System.gc();
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 }

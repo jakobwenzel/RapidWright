@@ -22,53 +22,128 @@
  
 package com.xilinx.rapidwright.edif;
 
-import java.util.ArrayList;
+import org.jetbrains.annotations.NotNull;
+
+import java.util.*;
 
 /**
  * Customized ArrayList<EDIFPortInst> for the {@link EDIFNet} and {@link EDIFCellInst} classes. 
  * Maintains a sorted list to allow for a O(log n) retrieval lookup by name.  Does not allow 
  * duplicate entries. 
  */
-public class EDIFPortInstList extends ArrayList<EDIFPortInst> {
+public class EDIFPortInstList implements Set<EDIFPortInst> {
 
-    private static final long serialVersionUID = 8718591209309655922L;
+    private static final long serialVersionUID = 7446248479402248969L;
     
     public static final EDIFPortInstList EMPTY = new EDIFPortInstList();
-    
+
+    private final List<EDIFPortInst> container = new ArrayList<>();
+
+    @Override
+    public int size() {
+        return container.size();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return container.isEmpty();
+    }
+
+    @Override
+    public boolean contains(Object o) {
+        return container.contains(o);
+    }
+
+    @NotNull
+    @Override
+    public Iterator<EDIFPortInst> iterator() {
+        return container.iterator();
+    }
+
+    @NotNull
+    @Override
+    public Object[] toArray() {
+        return container.toArray();
+    }
+
+    @NotNull
+    @Override
+    public <T> T[] toArray(@NotNull T[] a) {
+        return container.toArray(a);
+    }
+
     @Override
     public boolean add(EDIFPortInst e) {
-        int insertionPoint = binarySearch(e.getCellInst(), e.getName());
+        int insertionPoint = binarySearch(e.getCellInst(), e.getPort().getName(), e.getIndex());
         // Do not allow duplicates
         if(insertionPoint >= 0) {
             return false;
         }
-        super.add(insertionPoint >= 0 ? insertionPoint : ~insertionPoint, e);
+        container.add(~insertionPoint, e);
         return true;
     }
-    
-    public EDIFPortInst get(EDIFCellInst i, String name) {
-        int index = binarySearch(i, name);
-        if(index < 0) return null;
-        return get(index);
-    }
-    
-    public EDIFPortInst remove(EDIFPortInst e) {
-        return remove(e.getCellInst(), e.getName());
+
+    @Override
+    public boolean containsAll(@NotNull Collection<?> c) {
+        return container.containsAll(c);
     }
 
-    public EDIFPortInst remove(EDIFCellInst inst, String portInstName) {
-        int index = binarySearch(inst, portInstName);
+    @Override
+    public boolean addAll(@NotNull Collection<? extends EDIFPortInst> c) {
+        boolean changed = false;
+        for (EDIFPortInst edifPortInst : c) {
+            changed |= add(edifPortInst);
+        }
+        return changed;
+    }
+
+    @Override
+    public boolean retainAll(@NotNull Collection<?> c) {
+        return container.retainAll(c);
+    }
+
+    @Override
+    public boolean removeAll(@NotNull Collection<?> c) {
+        boolean changed = false;
+        for (Object o : c) {
+            changed |= remove(o);
+        }
+        return changed;
+    }
+
+    @Override
+    public void clear() {
+        container.clear();
+    }
+
+    public EDIFPortInst get(EDIFCellInst i, String portName, int portIndex) {
+        int index = binarySearch(i, portName, portIndex);
         if(index < 0) return null;
-        return super.remove(index);
+        return container.get(index);
+    }
+
+    @Override
+    public boolean remove(Object o) {
+        if (!(o instanceof EDIFPortInst)) {
+            return false;
+        }
+        EDIFPortInst e = (EDIFPortInst) o;
+        return remove(e.getCellInst(), e.getPort().getName(), e.getIndex()) != null;
+    }
+
+    public EDIFPortInst remove(EDIFCellInst inst, String portName, int portIndex) {
+        int index = binarySearch(inst, portName, portIndex);
+        if(index < 0) return null;
+        return container.remove(index);
     }
     
-    private int binarySearch(EDIFCellInst inst, String portInstName) {
+    private int binarySearch(EDIFCellInst inst, String portName, int index) {
         String instName = inst == null ? null : inst.getName();
         int left = 0;
         int right = size()-1;
         while(left <= right) {
             int pivot = (left + right) >>> 1;
-            int result = compare(get(pivot), instName, portInstName);
+            int result = compare(container.get(pivot), instName, portName, index);
             if(result < 0) {
                 left = pivot + 1;
             } else if (result > 0) {
@@ -87,30 +162,29 @@ public class EDIFPortInstList extends ArrayList<EDIFPortInst> {
      * @param left This is the existing EDIFPortInst within the lists that is being compared
      * @param rightInstName This is the cell instance name {@link EDIFCellInst#getName()} of the 
      * considered port instance to compare left against.  
-     * @param rightPortInstName This is the port instance name {@link EDIFPortInst#getName()} of the
+     * @param rightPortName This is the port name {@link EDIFPort#getName()} of the
+     * considered port instance's port to compare left against.
+     * @param rightPortName This is the port instance index {@link EDIFPortInst#getIndex()} of the
      * considered port instance to compare left against.
      * @return 0 if the left and corresponding right Strings are equal.  A number less than 0 if
-     * left is lexicographically before right, or a number greater than 0 if left is after right. 
+     * left is before right, or a number greater than 0 if left is after right.
      */
-    private int compare(EDIFPortInst left, String rightInstName, String rightPortInstName) {
-        if(left.getCellInst() == null) {
-            if(rightInstName == null) {
-                // left and right are both a top-level port insts, compare their port insts name only
-                return left.getName().compareTo(rightPortInstName);
-            }
-            int compare = left.getName().compareTo(rightInstName);
-            return compare == 0 ? -(rightPortInstName.length()) : compare;
-        } else if(rightInstName == null) {
-            // right is a top-level port inst, but left is not. Compare left's inst name with 
-            // right's port inst name.
-            int compare = left.getCellInst().getName().compareTo(rightPortInstName);
-            // If the two happen to be equal, then right's full name is a prefix of left's full name
-            // and thus left should go after right.
-            return compare == 0 ? left.getName().length() : compare;
+    private int compare(EDIFPortInst left, String rightInstName, String rightPortName, int rightIndex) {
+        String leftInstName = left.getCellInst() != null ? left.getCellInst().getName() : null;
+        int compare1 = Comparator.nullsFirst(Comparator.<String>naturalOrder()).compare(leftInstName, rightInstName);
+        if (compare1 != 0) {
+            return compare1;
         }
-        // left and right are both non top-level port insts. Compare their inst names first, then 
-        // compare their port inst names.
-        int compare = left.getCellInst().getName().compareTo(rightInstName);
-        return compare == 0 ? left.getName().compareTo(rightPortInstName) : compare; 
+        int compare2 = left.getPort().getName().compareTo(rightPortName);
+        if (compare2 != 0) {
+            return compare2;
+        }
+        return Integer.compare(left.getIndex(), rightIndex);
+    }
+
+    @Deprecated
+    public EDIFPortInst get(EDIFCellInst edifCellInst, String name) {
+        int index = name.endsWith("]") ? EDIFTools.getPortIndexFromName(name) : -1;
+        return get(edifCellInst, EDIFTools.getRootBusName(name), index);
     }
 }

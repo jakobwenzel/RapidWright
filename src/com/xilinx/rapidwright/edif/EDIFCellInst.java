@@ -120,24 +120,25 @@ public class EDIFCellInst extends EDIFPropertyObject implements EDIFEnumerable {
     
     /**
      * Removes the provided port instance from the cell instance, if it exists.  The port instances
-     * are stored in a sorted ArrayList, so worst case is O(n).
+     * are stored in a sorted ArrayList, so worst case is O(log(n)).
      * @param epr The port instance object to remove
-     * @return The removed port instance, or null if it was not found.
+     * @return True if the EDIFPortInst was removed
      */
-    protected EDIFPortInst removePortInst(EDIFPortInst epr){
-        if(portInsts == null) return null;
+    protected boolean removePortInst(EDIFPortInst epr){
+        if(portInsts == null) return false;
         return portInsts.remove(epr);
     }
     
     /**
      * Removes the named port instance from the cell instance, if it exists. The port instances
-     * are stored in a sorted ArrayList, so worst case is O(n).
-     * @param portName Name of the port ref to remove ({@link EDIFPortInst#getName()})
+     * are stored in a sorted ArrayList, so worst case is O(log(n)).
+     * @param portName Name of the port to remove ({@link EDIFPort#getName()})
+     * @param portIndex Index of the port inst to remove ({@link EDIFPortInst#getIndex()})
      * @return The removed port instance, or null if none found by that name.
      */
-    protected EDIFPortInst removePortInst(String portName){
+    protected EDIFPortInst removePortInst(String portName, int portIndex){
         if(portInsts == null) return null;
-        return portInsts.remove(this, portName);
+        return portInsts.remove(this, portName, portIndex);
     }
     
     /**
@@ -146,7 +147,13 @@ public class EDIFCellInst extends EDIFPropertyObject implements EDIFEnumerable {
      * @param name Name of the port instance to get. 
      * @return The named port instance, or null if none found by that name. 
      */
-    public EDIFPortInst getPortInst(String name){
+    public EDIFPortInst getPortInst(String name, int portIndex){
+        if(portInsts == null) return null;
+        return portInsts.get(this, name, portIndex);
+    }
+
+    @Deprecated
+    public EDIFPortInst getPortInst(String name) {
         if(portInsts == null) return null;
         return portInsts.get(this, name);
     }

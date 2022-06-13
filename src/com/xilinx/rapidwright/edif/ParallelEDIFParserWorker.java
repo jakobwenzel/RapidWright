@@ -267,7 +267,7 @@ public class ParallelEDIFParserWorker extends AbstractEDIFParserWorker implement
     private List<LinkPortInstData> currentLinks = new ArrayList<>();
 
     @Override
-    protected void linkEdifPortInstToCellInst(EDIFCell parentCell, EDIFPortInst portInst, EDIFNet net) {
+    protected void linkEdifPortInstToCellInst(EDIFCell parentCell, EDIFPortInst portInst, String portName, EDIFNet net) {
         if (parentCell != currentParentCell) {
             currentParentCell = parentCell;
             if (!currentLinks.isEmpty()) {
@@ -275,7 +275,7 @@ public class ParallelEDIFParserWorker extends AbstractEDIFParserWorker implement
             }
             currentLinks = new ArrayList<>();
         }
-        currentLinks.add(new LinkPortInstData(parentCell, portInst, net));
+        currentLinks.add(new LinkPortInstData(parentCell, portInst, net, portName));
     }
 
     public Stream<CellReferenceData> streamCellReferences() {
@@ -336,14 +336,17 @@ public class ParallelEDIFParserWorker extends AbstractEDIFParserWorker implement
         private final EDIFPortInst portInst;
         private final EDIFNet net;
 
+        private final String portName;
 
-        LinkPortInstData(EDIFCell parentCell, EDIFPortInst portInst, EDIFNet net) {
+
+        LinkPortInstData(EDIFCell parentCell, EDIFPortInst portInst, EDIFNet net, String portName) {
             this.parentCell = parentCell;
             this.portInst = portInst;
             this.net = net;
+            this.portName = portName;
         }
         public void apply() {
-            doLinkPortInstToCellInst(parentCell, portInst, net);
+            doLinkPortInstToCellInst(parentCell, portInst, portName, net);
         }
 
         public EDIFCell mapPortCell() {
@@ -358,11 +361,6 @@ public class ParallelEDIFParserWorker extends AbstractEDIFParserWorker implement
                 port = lookupPortCell(parentCell, portInst).getPortByLegalName(portInst.getName());
             }
             portInst.setPort(port);
-        }
-
-        public void name(StringPool uniquifier) {
-            String portInstName = portInst.getPortInstNameFromPort();
-            portInst.setName(uniquifier.uniquifyName(portInstName));
         }
 
         public void add() {

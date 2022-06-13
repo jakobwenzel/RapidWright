@@ -34,7 +34,7 @@ public class TestEDIFPortInstList {
 
     public EDIFPortInst makeEDIFPortInst(String portInstName) {
         EDIFPortInst portInst = new EDIFPortInst();
-        portInst.setName(portInstName);
+        //portInst.setName(portInstName);
         portInst.setPort(new EDIFPort());
         String instanceName = portInstName.contains("/") ? 
                 portInstName.substring(0, portInstName.lastIndexOf("/")) : null; 
@@ -42,7 +42,7 @@ public class TestEDIFPortInstList {
             EDIFCellInst cellInst = new EDIFCellInst();
             cellInst.setName(instanceName);
             portInst.setCellInst(cellInst);
-            portInst.setName(portInstName.substring(portInstName.lastIndexOf("/")+1));
+            //portInst.setName(portInstName.substring(portInstName.lastIndexOf("/")+1));
         }
         int index = portInstName.endsWith("]") ? EDIFTools.getPortIndexFromName(portInstName) : -1;
         portInst.setIndex(index);
@@ -202,8 +202,8 @@ public class TestEDIFPortInstList {
         Collections.sort(allNames);
         
         ArrayList<String> listSorted = new ArrayList<>();
-        for(int i=0; i < allNames.size(); i++) {
-            listSorted.add(list.get(i).getFullName());
+        for (EDIFPortInst edifPortInst : list) {
+            listSorted.add(edifPortInst.getFullName());
         }
 
         Assertions.assertTrue(listSorted.containsAll(allNames) && allNames.containsAll(listSorted));
