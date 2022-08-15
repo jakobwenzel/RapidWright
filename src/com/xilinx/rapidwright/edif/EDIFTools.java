@@ -25,7 +25,6 @@
 package com.xilinx.rapidwright.edif;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -55,7 +54,6 @@ import com.xilinx.rapidwright.design.Unisim;
 import com.xilinx.rapidwright.tests.CodePerfTracker;
 import com.xilinx.rapidwright.util.FileTools;
 import com.xilinx.rapidwright.util.Pair;
-import com.xilinx.rapidwright.util.ParallelismTools;
 
 
 /**
@@ -737,8 +735,8 @@ public class EDIFTools {
 		return FileSystems.getDefault().getPath(tempEDIFFileName);
 	}
 
-	public static EDIFNetlist loadEDIFStream(InputStream is, long size) throws IOException {
-		if (ParallelEDIFParser.calcThreads(size) > 1) {
+	public static EDIFNetlist loadEDIFStream(InputStream is, long size, int maxThreads) throws IOException {
+		if (ParallelEDIFParser.calcThreads(size, maxThreads) > 1) {
 			// Copy input stream to a temporary file so that it can be parsed in parallel
 			Path fileName = getTempEDIFFile();
 			try {
@@ -756,10 +754,15 @@ public class EDIFTools {
 		}
 	}
 
-	public static EDIFNetlist loadEDIFFile(Path fileName) {
+
+	public static EDIFNetlist loadEDIFStream(InputStream is, long size) throws IOException {
+		return loadEDIFStream(is, size, Integer.MAX_VALUE);
+	}
+
+	public static EDIFNetlist loadEDIFFile(Path fileName, int maxThreads) {
 	    try {
 	        final long size = Files.size(fileName);
-	        if (ParallelEDIFParser.calcThreads(size) > 1) {
+	        if (ParallelEDIFParser.calcThreads(size, maxThreads) > 1) {
 	            try (ParallelEDIFParser p = new ParallelEDIFParser(fileName)) {
 	                return p.parseEDIFNetlist();
 	            }           
@@ -771,6 +774,11 @@ public class EDIFTools {
 	    } catch (IOException e) {
 	        throw new UncheckedIOException("ERROR: Couldn't read file : " + fileName, e);
 	    }
+	}
+
+
+	public static EDIFNetlist loadEDIFFile(Path fileName) {
+		return loadEDIFFile(fileName, Integer.MAX_VALUE);
 	}
 
 	public static EDIFNetlist loadEDIFFile(String fileName){
