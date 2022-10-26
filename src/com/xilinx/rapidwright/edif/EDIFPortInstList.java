@@ -41,7 +41,8 @@ public class EDIFPortInstList extends ArrayList<EDIFPortInst> {
         int insertionPoint = binarySearch(e.getCellInst(), e.getName());
         // Do not allow duplicates
         if (insertionPoint >= 0) {
-            return false;
+            set(insertionPoint, e);
+            return true;
         }
         super.add(insertionPoint >= 0 ? insertionPoint : ~insertionPoint, e);
         return true;
